@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">WordFlow</string>
+    <string name="widget_name">WordFlow Word</string>
+    <string name="widget_description">Shows a vocabulary word with translation</string>
+</resources>
