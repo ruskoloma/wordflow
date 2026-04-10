@@ -351,7 +351,7 @@ fun SettingsScreen(
                 }
             }
 
-            // About
+            // About & Updates
             item {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
@@ -364,17 +364,125 @@ fun SettingsScreen(
             }
 
             item {
+                val updateState by viewModel.updateState.collectAsState()
+
                 SettingsCard {
-                    Text(
-                        text = "WordFlow v1.0.0",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        text = "Personal English-Russian vocabulary learning app",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = OnSurfaceVariant
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "WordFlow v${viewModel.getCurrentVersion(context)}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = "English-Russian vocabulary app",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = OnSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    when (val state = updateState) {
+                        is SettingsViewModel.UpdateState.Idle -> {
+                            OutlinedButton(
+                                onClick = { viewModel.checkForUpdate(context) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Outlined.SystemUpdate, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Check for updates")
+                            }
+                        }
+                        is SettingsViewModel.UpdateState.Checking -> {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Primary)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Checking...", style = MaterialTheme.typography.bodySmall, color = OnSurfaceVariant)
+                            }
+                        }
+                        is SettingsViewModel.UpdateState.UpToDate -> {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = Success, modifier = Modifier.size(18.dp))
+                                Text("You're up to date", style = MaterialTheme.typography.bodySmall, color = Success)
+                            }
+                        }
+                        is SettingsViewModel.UpdateState.Available -> {
+                            Card(
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = PrimaryContainer)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(
+                                        text = "Update available: v${state.release.versionName}",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = OnPrimaryContainer
+                                    )
+                                    if (state.release.body.isNotBlank()) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = state.release.body.take(200),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = OnPrimaryContainer.copy(alpha = 0.8f),
+                                            maxLines = 3
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Button(
+                                            onClick = { viewModel.downloadUpdate(context, state.release) },
+                                            shape = RoundedCornerShape(10.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                                            enabled = state.release.apkUrl != null
+                                        ) {
+                                            Icon(Icons.Outlined.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Download & Install")
+                                        }
+                                        TextButton(onClick = { viewModel.dismissUpdate() }) {
+                                            Text("Later")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        is SettingsViewModel.UpdateState.Downloading -> {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Primary)
+                                Text("Downloading update...", style = MaterialTheme.typography.bodySmall, color = OnSurfaceVariant)
+                            }
+                        }
+                        is SettingsViewModel.UpdateState.Error -> {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(Icons.Outlined.ErrorOutline, contentDescription = null, tint = Error, modifier = Modifier.size(18.dp))
+                                Text(state.message, style = MaterialTheme.typography.bodySmall, color = Error, modifier = Modifier.weight(1f))
+                                TextButton(onClick = { viewModel.checkForUpdate(context) }) { Text("Retry") }
+                            }
+                        }
+                    }
                 }
             }
 

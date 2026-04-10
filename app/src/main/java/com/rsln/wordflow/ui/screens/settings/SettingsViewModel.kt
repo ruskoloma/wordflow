@@ -17,6 +17,8 @@ import kotlinx.coroutines.launch
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import android.net.Uri
+import com.rsln.wordflow.updater.AppUpdater
+import com.rsln.wordflow.updater.ReleaseInfo
 
 class SettingsViewModel(
     private val settingsDataStore: SettingsDataStore,
@@ -191,6 +193,55 @@ class SettingsViewModel(
         result.add(current.toString())
         return result
     }
+
+    // --- App Update ---
+    private val _updateState = MutableStateFlow<UpdateState>(UpdateState.Idle)
+    val updateState: StateFlow<UpdateState> = _updateState
+
+    sealed class UpdateState {
+        data object Idle : UpdateState()
+        data object Checking : UpdateState()
+        data class Available(val release: ReleaseInfo, val currentVersion: String) : UpdateState()
+        data object UpToDate : UpdateState()
+        data object Downloading : UpdateState()
+        data class Error(val message: String) : UpdateState()
+    }
+
+    fun checkForUpdate(context: Context) {
+        _updateState.value = UpdateState.Checking
+        viewModelScope.launch {
+            val updater = AppUpdater(context)
+            val result = updater.checkForUpdate()
+            result.fold(
+                onSuccess = { release ->
+                    if (release == null) {
+                        _updateState.value = UpdateState.UpToDate
+                    } else {
+                        val current = updater.getCurrentVersion()
+                        if (updater.isNewerVersion(release.versionName, current)) {
+                            _updateState.value = UpdateState.Available(release, current)
+                        } else {
+                            _updateState.value = UpdateState.UpToDate
+                        }
+                    }
+                },
+                onFailure = {
+                    _updateState.value = UpdateState.Error(it.message ?: "Check failed")
+                }
+            )
+        }
+    }
+
+    fun downloadUpdate(context: Context, release: ReleaseInfo) {
+        val url = release.apkUrl ?: return
+        _updateState.value = UpdateState.Downloading
+        val updater = AppUpdater(context)
+        updater.downloadAndInstall(url, release.versionName)
+    }
+
+    fun dismissUpdate() { _updateState.value = UpdateState.Idle }
+
+    fun getCurrentVersion(context: Context): String = AppUpdater(context).getCurrentVersion()
 
     fun clearTestResult() { _testResult.value = null }
     fun clearSyncMessage() { _syncMessage.value = null }
