@@ -1,0 +1,30 @@
+# Binaries and build artifacts
+/bin/
+/out/
+/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go test outputs
+*.test
+*.out
+coverage.*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# OS junk
+.DS_Store
+Thumbs.db

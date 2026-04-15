@@ -1,0 +1,60 @@
+# sqlc configuration for WordFlow backend.
+#
+# sqlc reads the annotated .sql files under ./queries, checks them against
+# the live schema under ./migrations, and generates type-safe Go code
+# under ./internal/db/sqlc. No runtime reflection, no string-based queries
+# in app code — every query becomes a typed Go function.
+#
+# Two settings do most of the work here:
+#
+#   1. `sql_package: pgx/v5` tells sqlc to use pgx v5 natively (not
+#      database/sql), which means pgxpool.Pool satisfies the generated
+#      DBTX interface directly and you skip an entire translation layer.
+#
+#   2. `emit_pointers_for_null_types: true` makes nullable columns and
+#      nullable query args (sqlc.narg(...)) emit Go pointers (*string,
+#      *int32, *time.Time, *bool) instead of pgx's pgtype wrappers. This
+#      is a huge ergonomic win for handler code — you can check `!= nil`
+#      and dereference, no `.Valid / .String` dance.
+#
+# The one override we do need: UUID columns become github.com/google/uuid
+# types instead of pgtype.UUID. We use google/uuid everywhere in handlers
+# (URL params, JSON bodies), so aligning the DB types with that saves a
+# conversion on every call.
+
+version: "2"
+
+sql:
+  - engine: "postgresql"
+    queries: "./queries"
+    schema:  "./migrations"
+    gen:
+      go:
+        package: "sqlc"
+        out:     "./internal/db/sqlc"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        json_tags_case_style: "snake"
+        emit_interface: false
+        emit_empty_slices: true
+        emit_pointers_for_null_types: true
+        overrides:
+          - db_type: "uuid"
+            go_type: "github.com/google/uuid.UUID"
+          # Without this, pgx/v5 sql_package defaults timestamptz to
+          # pgtype.Timestamptz (a struct with a .Time and .Valid field).
+          # Overriding to time.Time makes non-nullable timestamps just
+          # time.Time, and with emit_pointers_for_null_types the nullable
+          # ones become *time.Time. Much easier to pass to JSON encoders
+          # and handler logic.
+          - db_type: "timestamptz"
+            go_type: "time.Time"
+          # Nullable variant. emit_pointers_for_null_types doesn't
+          # pointer-wrap overridden types automatically, so we spell
+          # out `*time.Time` explicitly with the structured form.
+          - db_type: "timestamptz"
+            nullable: true
+            go_type:
+              import: "time"
+              type: "Time"
+              pointer: true

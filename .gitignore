@@ -1,16 +1,22 @@
-*.iml
-.gradle
-/local.properties
-/.idea
+# Monorepo-level ignores. Each subproject (android/, backend/) has
+# its own .gitignore for language-specific build artifacts — this
+# file only covers things that don't belong to any one subproject.
+
+# Secrets — NEVER commit. tmp/env.local holds Clerk + OpenRouter
+# keys that docker-compose loads via env_file: ../tmp/env.local.
+tmp/
+.env
+.env.local
+.env.*.local
+
+# OS / editor junk
 .DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
-local.properties
-/app/build
-/app/release
-*.apk
-*.aab
-*.jks
-*.keystore
+Thumbs.db
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# Misc
+.cache/

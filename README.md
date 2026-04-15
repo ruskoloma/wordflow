@@ -1,76 +1,76 @@
 # WordFlow
 
-Personal English-to-Russian vocabulary learning app for Android.
+Personal English-Russian vocabulary app. Monorepo holding the
+Android client and the Go backend that serves it.
 
-## Setup
+## Layout
 
-### Requirements
-- Android Studio Hedgehog (2023.1.1) or later
-- JDK 17
-- Min SDK 26 (Android 8.0)
-
-### local.properties
-
-Add your keys to `local.properties` (gitignored):
-```properties
-OPENROUTER_API_KEY=sk-or-v1-your-key-here
-AWS_ACCESS_KEY=your-access-key
-AWS_SECRET_KEY=your-secret-key
-AWS_REGION=us-west-2
+```
+.
+├── android/         — Kotlin + Jetpack Compose client (Room, OkHttp)
+├── backend/         — Go REST backend (chi + pgx + sqlc + Clerk)
+├── .github/
+│   └── workflows/
+│       └── release.yml   — Builds android/ APK on version tag push
+├── tmp/             — (gitignored) local secrets for docker-compose
+└── README.md
 ```
 
-### Build & Run
+## Android
+
+Android project lives in [`android/`](android/). Open the folder in
+Android Studio or build from the command line:
 
 ```bash
+cd android
 ./gradlew assembleDebug
-./gradlew installDebug
 ```
 
-## Releasing a New Version
+The app talks to the backend over HTTP (default `http://10.0.2.2:8080`
+for the emulator). Override via `WORDFLOW_BACKEND_URL` in
+`android/local.properties` when testing from a physical device on the
+LAN.
 
-### Option 1: Automated (GitHub Actions)
+Auto-updates: the in-app updater polls
+`api.github.com/repos/ruskoloma/wordflow/releases/latest` and installs
+the APK attached to the newest tag. New releases are produced by the
+`release.yml` workflow whenever a `v*` tag is pushed.
+
+## Backend
+
+Go backend lives in [`backend/`](backend/). Local dev runs through
+docker-compose (Go toolchain on the host is optional):
 
 ```bash
-# Bump version, tag, push — Actions builds APK and creates release
-./release.sh 1.1.0 "What changed"
+cd backend
+make up            # Postgres + app via docker-compose
+make migrate-up    # Run migrations against the compose DB
+make logs          # Tail app logs
+make devtoken      # Mint a Clerk session JWT for curl testing
 ```
 
-### Option 2: Manual
+Secrets (Clerk keys, OpenRouter key) are read from
+[`tmp/env.local`](tmp/env.local) at the monorepo root via
+`env_file: ../tmp/env.local` in `backend/docker-compose.yml`. That
+path is gitignored — never commit real keys.
 
-```bash
-# 1. Edit app/build.gradle.kts — bump versionName and versionCode
-# 2. Build
-./gradlew assembleDebug
+Full backend architecture notes live in
+[`backend/internal/`](backend/internal/) — each package has a
+doc comment at the top of its primary file.
 
-# 3. Create GitHub release with APK attached
-gh release create v1.1.0 \
-  --title "WordFlow v1.1.0" \
-  --notes "What changed" \
-  app/build/outputs/apk/debug/app-debug.apk
-```
+## Passwordless sign-in
 
-### GitHub Actions Secrets
+The login flow uses Clerk's email-code strategy with no passwords.
+Android posts `{email}` to `POST /v1/auth/email/start`, the Go
+backend drives Clerk's Frontend API to send a 6-digit code, and
+the second call `POST /v1/auth/email/verify {state_id, code}`
+exchanges the code for a session JWT.
 
-For automated builds, add these repo secrets (`Settings > Secrets > Actions`):
-- `OPENROUTER_API_KEY`
-- `AWS_ACCESS_KEY`
-- `AWS_SECRET_KEY`
-- `AWS_REGION`
+For dev, any address containing `+clerk_test@` auto-accepts the
+magic code `424242` so you don't spam your real inbox.
 
-## Self-Update
+## Deployment
 
-The app checks `ruskoloma/wordflow` GitHub Releases for new versions.
-Go to **Settings > About > Check for updates**. If a newer version exists,
-it downloads the APK and launches the Android package installer.
-
-The repo must be **public** for unauthenticated API access from the app.
-
-## Architecture
-
-- **Kotlin** + Jetpack Compose (Material 3)
-- **Room** local database, **DataStore** preferences
-- **OkHttp** + **Gson** for OpenRouter AI & AWS DynamoDB
-- **RemoteViews** home screen widget
-- **WorkManager** notification scheduling
-- Auto cloud sync via DynamoDB (offline-first)
-- Self-update via GitHub Releases
+Backend is designed to deploy to Railway in Docker against a
+DigitalOcean-managed PostgreSQL. Not yet wired up — see the plan
+notes in-session.

@@ -1,0 +1,12 @@
+# Don't bake local-only files into the image.
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+*.md
+README.md
+Makefile
+docker-compose.yml
+.dockerignore
+.DS_Store

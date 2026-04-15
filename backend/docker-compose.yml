@@ -1,0 +1,55 @@
+# Local dev stack for WordFlow backend.
+# Two services:
+#   - postgres: ephemeral dev DB (data persists in a named volume)
+#   - app:      the Go HTTP server, built from the local Dockerfile
+#
+# Bring everything up with `make up` or `docker compose up --build`.
+# Secrets (Clerk, OpenRouter) live in ../tmp/env.local — NOT committed,
+# loaded via the `env_file:` directive below. DB credentials and other
+# non-secret settings are defined inline.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: wordflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-wordflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wordflow}
+      POSTGRES_DB: ${POSTGRES_DB:-wordflow}
+    volumes:
+      - wordflow-pg-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-wordflow} -d ${POSTGRES_DB:-wordflow}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wordflow-app
+    restart: unless-stopped
+    # CLERK_SECRET_KEY, CLERK_AUTHORIZED_PARTY, OPENROUTER_API_KEY come
+    # from the local secrets file. Path is relative to this compose file,
+    # so ../tmp/env.local resolves to Projects/WordFlow/tmp/env.local.
+    # Missing keys simply aren't set in the container — the Go app
+    # handles empty values gracefully (see internal/auth/clerk.go).
+    env_file:
+      - ../tmp/env.local
+    environment:
+      # In-container hostname is the service name `postgres`, not localhost.
+      DATABASE_URL: postgres://${POSTGRES_USER:-wordflow}:${POSTGRES_PASSWORD:-wordflow}@postgres:5432/${POSTGRES_DB:-wordflow}?sslmode=disable
+      PORT: ${PORT:-8080}
+      ENV: ${ENV:-development}
+    ports:
+      - "${PORT:-8080}:${PORT:-8080}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  wordflow-pg-data:
