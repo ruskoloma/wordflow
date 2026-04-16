@@ -5,7 +5,7 @@ import okhttp3.Interceptor
 import okhttp3.Response
 
 /**
- * OkHttp interceptor that attaches the stored Clerk JWT as a
+ * OkHttp interceptor that attaches the stored WordFlow app JWT as a
  * Bearer token on every outgoing request. If no token is stored,
  * the request goes out without the Authorization header and the
  * server returns 401 — which the BackendClient surfaces as a

@@ -79,6 +79,7 @@ func main() {
 	authCfg := auth.Config{
 		SecretKey:       cfg.ClerkSecretKey,
 		AuthorizedParty: cfg.ClerkAuthorizedParty,
+		AppJWTSecret:    cfg.AppJWTSecret,
 	}
 	if err := auth.Init(authCfg, logger); err != nil {
 		logger.Error("clerk auth init failed", "err", err)

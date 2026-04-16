@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/clerk/clerk-sdk-go/v2/session"
 	"github.com/clerk/clerk-sdk-go/v2/user"
 
 	"github.com/rsln-ua/wordflow-backend/internal/auth"
@@ -35,13 +34,12 @@ import (
 //      Server:
 //        a. Looks up the stashed state
 //        b. Calls Clerk Frontend API attempt_first_factor with the code
-//        c. On success, uses the backend SDK's session.CreateToken to
-//           mint a session JWT for the newly-created Clerk session
+//        c. On success, mints a WordFlow app JWT for the Clerk user
 //        d. Returns {jwt, user_id} to the client
 //
 // This avoids the client having to maintain the Clerk dev_browser_jwt
-// or talk to the Frontend API directly — Android just sees two simple
-// POSTs.
+// or talk to the Frontend API directly. Android just sees two simple
+// POSTs and stores the app JWT returned by the backend.
 
 // authResponse is the success body for /v1/auth/email/verify. We
 // return the email alongside the JWT so the client can show a
@@ -238,7 +236,7 @@ func (h *handlers) authEmailVerify(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
 
-	sessionID, err := cf.AttemptSignIn(ctx, entry.session, body.Code)
+	_, err := cf.AttemptSignIn(ctx, entry.session, body.Code)
 	if err != nil {
 		var apiErr *auth.ClerkAPIError
 		if errors.As(err, &apiErr) {
@@ -261,16 +259,6 @@ func (h *handlers) authEmailVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Sign-in is complete on the Clerk side. Mint a JWT for that
-	// session via the backend SDK — same call the devtoken CLI uses.
-	tok, err := session.CreateToken(ctx, &session.CreateTokenParams{ID: sessionID})
-	if err != nil {
-		h.logger.Error("session.CreateToken after email verify", "err", err)
-		writeError(w, http.StatusInternalServerError, "internal",
-			"could not mint session token")
-		return
-	}
-
 	// Look up the user id so the client can display it. The Clerk
 	// session we just created is linked to the user, so an email
 	// lookup is the simplest way back.
@@ -281,9 +269,23 @@ func (h *handlers) authEmailVerify(w http.ResponseWriter, r *http.Request) {
 	if listErr == nil && users != nil && len(users.Users) > 0 {
 		userID = users.Users[0].ID
 	}
+	if userID == "" {
+		h.logger.Error("clerk user lookup after email verify failed", "err", listErr, "email", entry.email)
+		writeError(w, http.StatusInternalServerError, "internal",
+			"could not resolve signed-in user")
+		return
+	}
+
+	token, err := auth.MintAppToken(userID, entry.email, 30*24*time.Hour)
+	if err != nil {
+		h.logger.Error("mint app token after email verify", "err", err)
+		writeError(w, http.StatusInternalServerError, "internal",
+			"could not mint session token")
+		return
+	}
 
 	writeJSON(w, http.StatusOK, authResponse{
-		JWT:    tok.JWT,
+		JWT:    token,
 		UserID: userID,
 		Email:  entry.email,
 	})

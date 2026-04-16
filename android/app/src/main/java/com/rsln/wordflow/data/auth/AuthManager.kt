@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * Stores and exposes the currently-active Clerk session JWT plus the
+ * Stores and exposes the currently-active WordFlow app JWT plus the
  * email address the user signed in with.
  *
  * The JWT is what matters to the backend — it goes on the
@@ -84,8 +84,8 @@ class AuthManager(context: Context) {
 
     companion object {
         private const val PREFS_FILE = "wordflow_auth"
-        private const val KEY_TOKEN = "clerk_token"
-        private const val KEY_USER_ID = "clerk_user_id"
-        private const val KEY_EMAIL = "clerk_email"
+        private const val KEY_TOKEN = "wordflow_token"
+        private const val KEY_USER_ID = "wordflow_user_id"
+        private const val KEY_EMAIL = "wordflow_email"
     }
 }

@@ -26,7 +26,7 @@ import kotlinx.coroutines.launch
  *
  * The backend handles everything Clerk-specific: creating users that
  * don't exist yet, talking to Clerk's Frontend API with the dev
- * browser JWT, minting the session token at the end. Android just
+ * browser JWT, minting the app token at the end. Android just
  * sees "email → state_id → code → jwt".
  */
 class LoginViewModel(

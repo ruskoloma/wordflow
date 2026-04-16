@@ -29,6 +29,10 @@ type Config struct {
 	ClerkSecretKey       string `envconfig:"CLERK_SECRET_KEY"`
 	ClerkAuthorizedParty string `envconfig:"CLERK_AUTHORIZED_PARTY"`
 
+	// WordFlow app JWTs are issued after Clerk verifies the email-code
+	// login. If unset, the server falls back to CLERK_SECRET_KEY.
+	AppJWTSecret string `envconfig:"APP_JWT_SECRET"`
+
 	// Publishable key (pk_test_... or pk_live_...). Required for the
 	// passwordless email-code sign-in flow — we talk to Clerk's
 	// Frontend API on the client's behalf and that API authenticates

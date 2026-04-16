@@ -134,7 +134,7 @@ data class EmailStartResponse(
 
 /**
  * Body for POST /v1/auth/email/verify. Swap the 6-digit code for
- * a session JWT + user_id.
+ * an app JWT + user_id.
  */
 data class EmailVerifyRequest(
     @SerializedName("state_id") val stateId: String,

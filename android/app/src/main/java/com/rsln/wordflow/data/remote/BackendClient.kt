@@ -210,7 +210,10 @@ class BackendClient(private val authManager: AuthManager) {
             } catch (_: Exception) { ErrorResponse(error = body.take(200)) }
 
             throw when (status) {
-                401 -> BackendException.Unauthorized(errorBody.message.ifBlank { "not signed in or token expired" })
+                401 -> {
+                    authManager.signOut()
+                    BackendException.Unauthorized(errorBody.message.ifBlank { "not signed in or token expired" })
+                }
                 404 -> BackendException.NotFound(errorBody.message.ifBlank { "not found" })
                 409 -> BackendException.Conflict(errorBody.error, errorBody.existingId)
                 429 -> BackendException.RateLimited(errorBody.message.ifBlank { "rate limit exceeded" })

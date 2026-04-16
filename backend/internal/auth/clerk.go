@@ -1,7 +1,8 @@
-// Package auth verifies Clerk-issued JWTs and injects the authenticated
-// Clerk user id into the request context.
+// Package auth verifies WordFlow app JWTs or Clerk-issued JWTs and injects
+// the authenticated Clerk user id into the request context.
 //
 // Why Clerk and not something else?
+//
 //   - Clerk runs its own identity service, mints JWTs signed with RS256,
 //     and exposes a JWKS endpoint. All we do is verify the token signature
 //     against the public key set, check expiry/nbf/authorized party, and
@@ -53,6 +54,12 @@ type Config struct {
 	// "https://some-app.clerk.accounts.dev" or your custom domain).
 	// If empty, the middleware refuses to boot — see Init.
 	AuthorizedParty string
+
+	// AppJWTSecret signs WordFlow-issued app tokens. If empty, Init
+	// falls back to SecretKey so existing deployments keep working; set
+	// APP_JWT_SECRET in production to rotate app tokens independently
+	// from Clerk credentials.
+	AppJWTSecret string
 }
 
 // contextKey is an unexported type so external packages can't accidentally
@@ -84,8 +91,23 @@ var ErrUnauthorized = errors.New("unauthorized")
 //
 //   - Both set: full verification including azp match. Production mode.
 func Init(cfg Config, logger *slog.Logger) error {
+	appSecret := cfg.AppJWTSecret
+	if appSecret == "" {
+		appSecret = cfg.SecretKey
+	}
+	ConfigureAppJWT(appSecret)
+	if cfg.AppJWTSecret == "" && cfg.SecretKey != "" {
+		logger.Warn("APP_JWT_SECRET not set; using CLERK_SECRET_KEY for WordFlow app tokens")
+	} else if cfg.AppJWTSecret != "" {
+		logger.Info("wordflow app jwt initialized")
+	}
+
 	if cfg.SecretKey == "" {
-		logger.Warn("CLERK_SECRET_KEY not set; protected routes will reject all requests")
+		if AppJWTConfigured() {
+			logger.Warn("CLERK_SECRET_KEY not set; only WordFlow app JWTs will be accepted")
+		} else {
+			logger.Warn("CLERK_SECRET_KEY not set; protected routes will reject all requests")
+		}
 		return nil
 	}
 	clerk.SetKey(cfg.SecretKey)
@@ -116,7 +138,7 @@ func Init(cfg Config, logger *slog.Logger) error {
 // AuthorizedParty enforcement is only wired in when it's configured;
 // otherwise the azp claim is accepted as-is. See Init for the rationale.
 func Middleware(cfg Config, logger *slog.Logger) func(next http.Handler) http.Handler {
-	ready := cfg.SecretKey != ""
+	ready := cfg.SecretKey != "" || AppJWTConfigured()
 
 	// Decide once at construction time whether to pass an
 	// AuthorizedPartyHandler to jwt.Verify. nil means "don't check".
@@ -136,6 +158,21 @@ func Middleware(cfg Config, logger *slog.Logger) func(next http.Handler) http.Ha
 			token, ok := extractBearerToken(r.Header.Get("Authorization"))
 			if !ok {
 				writeUnauthorized(w, logger, "missing or malformed Authorization header")
+				return
+			}
+
+			if subject, handled, err := VerifyAppToken(token, 60*time.Second); handled {
+				if err != nil {
+					writeUnauthorized(w, logger, "app jwt verify failed: "+err.Error())
+					return
+				}
+				ctx := context.WithValue(r.Context(), userIDKey, subject)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			if cfg.SecretKey == "" {
+				writeUnauthorized(w, logger, "clerk not configured on server")
 				return
 			}
 

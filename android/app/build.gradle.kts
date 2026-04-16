@@ -28,8 +28,8 @@ android {
         applicationId = "com.rsln.wordflow"
         minSdk = 26
         targetSdk = 34
-        versionCode = 3
-        versionName = "1.0.2"
+        versionCode = 4
+        versionName = "1.0.3"
 
         val openRouterKey = localProps.getProperty("OPENROUTER_API_KEY", "")
         buildConfigField("String", "OPENROUTER_API_KEY", "\"$openRouterKey\"")
