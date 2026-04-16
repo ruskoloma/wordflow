@@ -37,11 +37,13 @@ type Config struct {
 	ClerkPublishableKey string `envconfig:"CLERK_PUBLISHABLE_KEY"`
 
 	// OpenRouter — optional until Phase 8 ships the AI proxy.
-	// Model defaults to the same one the Android app was using
-	// directly (google/gemini-2.0-flash-001); override via env
-	// to swap providers without a code change.
+	// Model defaults to openai/gpt-4o-mini — cheap, fast, good
+	// enough for single-word translation. Override via the
+	// OPENROUTER_MODEL env var to swap providers without a code
+	// change; the full list of candidates lives in
+	// android/app/src/main/java/com/rsln/wordflow/data/remote/AiModels.kt.
 	OpenrouterAPIKey string `envconfig:"OPENROUTER_API_KEY"`
-	OpenrouterModel  string `envconfig:"OPENROUTER_MODEL" default:"google/gemini-2.0-flash-001"`
+	OpenrouterModel  string `envconfig:"OPENROUTER_MODEL" default:"openai/gpt-4o-mini"`
 }
 
 // Load reads the environment into a Config. Called once from main.
