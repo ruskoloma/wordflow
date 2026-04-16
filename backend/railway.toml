@@ -18,12 +18,11 @@ healthcheckPath = "/health"
 healthcheckTimeout = 60
 
 # Run migrations before the new revision starts serving traffic.
-# Railway invokes this in a one-shot container built from the
-# same image, expanding $DATABASE_URL from the service's env vars.
-# If the command exits non-zero the deploy is aborted and the
-# current revision keeps serving — exactly what you want for
-# migration safety.
-preDeployCommand = "/migrate -path /migrations -database $DATABASE_URL up"
+# /migrate-up reads DATABASE_URL from the process environment. That avoids
+# relying on shell expansion, which is not available in our distroless image.
+# If the command exits non-zero the deploy is aborted and the current revision
+# keeps serving.
+preDeployCommand = "/migrate-up"
 
 # Start command. ENTRYPOINT in the Dockerfile is already /server,
 # so this is explicit-for-clarity rather than strictly necessary.

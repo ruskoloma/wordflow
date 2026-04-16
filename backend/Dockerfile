@@ -16,7 +16,8 @@ RUN go mod download
 # binary so we can ship it in a distroless image without libc.
 # -ldflags="-s -w" strips debug info, ~30% smaller binary.
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/server ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/server ./cmd/server \
+ && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/migrate-up ./cmd/migrateup
 
 # ---- Migrate tool stage --------------------------------------------------
 # Bake the golang-migrate CLI into a separate build stage and copy the
@@ -34,6 +35,7 @@ RUN apk add --no-cache git \
 # Smallest possible attack surface for a stateless HTTP server.
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build         /out/server      /server
+COPY --from=build         /out/migrate-up  /migrate-up
 COPY --from=migrate-build /go/bin/migrate  /migrate
 COPY --from=build         /src/migrations  /migrations
 EXPOSE 8080
