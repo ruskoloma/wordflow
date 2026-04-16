@@ -42,14 +42,14 @@ AWS_REGION=us-west-2
 
 ```bash
 # 1. Edit app/build.gradle.kts — bump versionName and versionCode
-# 2. Build
-./gradlew assembleDebug
+# 2. Build a signed release APK
+./gradlew assembleRelease
 
 # 3. Create GitHub release with APK attached
 gh release create v1.1.0 \
   --title "WordFlow v1.1.0" \
   --notes "What changed" \
-  app/build/outputs/apk/debug/app-debug.apk
+  app/build/outputs/apk/release/app-release.apk
 ```
 
 ### GitHub Actions Secrets
@@ -59,6 +59,13 @@ For automated builds, add these repo secrets (`Settings > Secrets > Actions`):
 - `AWS_ACCESS_KEY`
 - `AWS_SECRET_KEY`
 - `AWS_REGION`
+- `ANDROID_SIGNING_KEYSTORE_BASE64`
+- `ANDROID_SIGNING_STORE_PASSWORD`
+- `ANDROID_SIGNING_KEY_ALIAS`
+- `ANDROID_SIGNING_KEY_PASSWORD`
+
+The Android signing secrets keep every GitHub release APK signed with the
+same certificate. Without that, Android refuses in-place updates.
 
 Optional repo variable:
 - `WORDFLOW_BACKEND_URL` defaults to `https://wordflow-production-916f.up.railway.app`

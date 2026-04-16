@@ -1,6 +1,7 @@
 package com.rsln.wordflow.ui.screens.addword
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -18,8 +19,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rsln.wordflow.WordFlowApp
@@ -40,6 +44,8 @@ fun AddWordScreen(
     val preAppliedCollection by viewModel.preAppliedCollection.collectAsState()
     val selectedAiModel by viewModel.selectedAiModel.collectAsState()
     var showModelPicker by remember { mutableStateOf(false) }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
 
     // Check for pending generated words from Collections -> Generate flow
     LaunchedEffect(Unit) {
@@ -111,17 +117,12 @@ fun AddWordScreen(
             }
 
             item {
-                OutlinedButton(
-                    onClick = { showModelPicker = true },
+                ModelSelectButton(
+                    selectedModel = selectedAiModel,
                     enabled = !isTranslating,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    contentPadding = PaddingValues(vertical = 12.dp, horizontal = 14.dp)
-                ) {
-                    Icon(Icons.Outlined.Tune, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Model: ${AiModel.displayName(selectedAiModel)}")
-                }
+                    onClick = { showModelPicker = true },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
             item {
@@ -130,7 +131,11 @@ fun AddWordScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Button(
-                        onClick = viewModel::translate,
+                        onClick = {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            viewModel.translate()
+                        },
                         enabled = inputText.isNotBlank() && !isTranslating,
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(14.dp),
@@ -253,9 +258,74 @@ fun AddWordScreen(
         AiModelPickerDialog(
             selectedModel = selectedAiModel,
             title = "Translation model",
-            onSelect = viewModel::selectAiModel,
+            onSelect = {
+                keyboardController?.hide()
+                focusManager.clearFocus()
+                viewModel.selectAiModelAndTranslate(it)
+            },
             onDismiss = { showModelPicker = false }
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ModelSelectButton(
+    selectedModel: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val model = AiModel.AVAILABLE_MODELS.firstOrNull { it.id == selectedModel }
+    val provider = model?.id?.substringBefore('/')?.replaceFirstChar { it.uppercase() } ?: "AI"
+
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier,
+        shape = RoundedCornerShape(8.dp),
+        color = PrimaryContainer.copy(alpha = 0.55f),
+        contentColor = OnPrimaryContainer,
+        border = BorderStroke(1.dp, Primary.copy(alpha = 0.35f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = Primary,
+                contentColor = OnPrimary
+            ) {
+                Icon(
+                    Icons.Outlined.AutoAwesome,
+                    contentDescription = null,
+                    modifier = Modifier.padding(8.dp).size(18.dp)
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = AiModel.displayName(selectedModel),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "$provider model - tap to switch",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = OnSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Icon(
+                Icons.Outlined.KeyboardArrowDown,
+                contentDescription = null,
+                tint = Primary
+            )
+        }
     }
 }
 

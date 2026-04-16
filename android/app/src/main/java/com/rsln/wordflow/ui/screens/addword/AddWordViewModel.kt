@@ -93,6 +93,13 @@ class AddWordViewModel(
         }
     }
 
+    fun selectAiModelAndTranslate(model: String) {
+        selectAiModel(model)
+        if (_inputText.value.isNotBlank() && !_isTranslating.value) {
+            translate()
+        }
+    }
+
     fun translate() {
         val lines = _inputText.value.lines()
             .map { it.trim() }

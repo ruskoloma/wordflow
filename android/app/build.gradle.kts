@@ -20,6 +20,17 @@ fun configValue(name: String, defaultValue: String): String =
 fun buildConfigString(value: String): String =
     "\"${value.trim().replace("\\", "\\\\").replace("\"", "\\\"")}\""
 
+val releaseStoreFile = configValue("WORDFLOW_SIGNING_STORE_FILE", "")
+val releaseStorePassword = configValue("WORDFLOW_SIGNING_STORE_PASSWORD", "")
+val releaseKeyAlias = configValue("WORDFLOW_SIGNING_KEY_ALIAS", "")
+val releaseKeyPassword = configValue("WORDFLOW_SIGNING_KEY_PASSWORD", "")
+val hasReleaseSigning = listOf(
+    releaseStoreFile,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword
+).all { it.isNotBlank() }
+
 android {
     namespace = "com.rsln.wordflow"
     compileSdk = 34
@@ -28,8 +39,8 @@ android {
         applicationId = "com.rsln.wordflow"
         minSdk = 26
         targetSdk = 34
-        versionCode = 4
-        versionName = "1.0.3"
+        versionCode = 5
+        versionName = "1.0.4"
 
         val openRouterKey = localProps.getProperty("OPENROUTER_API_KEY", "")
         buildConfigField("String", "OPENROUTER_API_KEY", "\"$openRouterKey\"")
@@ -44,9 +55,23 @@ android {
         buildConfigField("String", "BACKEND_URL", buildConfigString(backendUrl))
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseStoreFile)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -98,7 +123,7 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.code.gson:gson:2.10.1")
 
-    // EncryptedSharedPreferences for stashing the Clerk JWT securely.
+    // EncryptedSharedPreferences for stashing the WordFlow app JWT securely.
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
     implementation("androidx.work:work-runtime-ktx:2.9.0")

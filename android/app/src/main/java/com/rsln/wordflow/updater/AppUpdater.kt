@@ -63,18 +63,22 @@ class AppUpdater(private val context: Context) {
             val releaseBody = json.get("body")?.asString ?: ""
             val publishedAt = json.get("published_at")?.asString ?: ""
 
-            // Find APK asset
+            // Prefer a release-signed APK. Debug APKs can be signed with a
+            // different key on each CI run, which Android refuses to update.
             val assets = json.getAsJsonArray("assets")
             var apkUrl: String? = null
             if (assets != null) {
+                val apkAssets = mutableListOf<Pair<String, String>>()
                 for (asset in assets) {
                     val assetObj = asset.asJsonObject
                     val name = assetObj.get("name")?.asString ?: ""
                     if (name.endsWith(".apk")) {
-                        apkUrl = assetObj.get("browser_download_url")?.asString
-                        break
+                        val url = assetObj.get("browser_download_url")?.asString ?: ""
+                        if (url.isNotBlank()) apkAssets.add(name to url)
                     }
                 }
+                apkUrl = apkAssets.firstOrNull { it.first.contains("release", ignoreCase = true) }?.second
+                    ?: apkAssets.firstOrNull()?.second
             }
 
             val versionName = tagName.removePrefix("v")
