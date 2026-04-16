@@ -35,7 +35,7 @@ class BackendClient(private val authManager: AuthManager) {
     private val client = OkHttpClient.Builder()
         .addInterceptor(AuthInterceptor(authManager))
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(180, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 

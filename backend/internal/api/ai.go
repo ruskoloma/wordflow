@@ -26,6 +26,7 @@ import (
 type translateRequest struct {
 	Word                string   `json:"word"`
 	ExistingCollections []string `json:"existing_collections,omitempty"`
+	Model               string   `json:"model,omitempty"`
 }
 
 type translateResponse struct {
@@ -59,6 +60,7 @@ type generateCollectionRequest struct {
 	Description      string `json:"description,omitempty"`
 	WordCount        int    `json:"word_count"`
 	TargetDifficulty int    `json:"target_difficulty,omitempty"`
+	Model            string `json:"model,omitempty"`
 }
 
 type generateCollectionResponse struct {
@@ -102,6 +104,10 @@ func (h *handlers) aiTranslate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "missing_fields", "word is required")
 		return
 	}
+	model, ok := requestedModel(w, body.Model)
+	if !ok {
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
 	defer cancel()
@@ -110,6 +116,7 @@ func (h *handlers) aiTranslate(w http.ResponseWriter, r *http.Request) {
 		{Role: "system", Content: ai.TranslateSystemPrompt},
 		{Role: "user", Content: ai.TranslateUserPrompt(body.Word, body.ExistingCollections)},
 	}, ai.ChatOptions{
+		Model:       model,
 		Temperature: 0.3,
 		MaxTokens:   500,
 		JSONMode:    true,
@@ -169,6 +176,10 @@ func (h *handlers) aiGenerateCollection(w http.ResponseWriter, r *http.Request) 
 	if targetDifficulty < 1 || targetDifficulty > 10 {
 		targetDifficulty = 5
 	}
+	model, ok := requestedModel(w, body.Model)
+	if !ok {
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second) // generation can be slow
 	defer cancel()
@@ -177,8 +188,9 @@ func (h *handlers) aiGenerateCollection(w http.ResponseWriter, r *http.Request) 
 		{Role: "system", Content: ai.GenerateCollectionSystemPrompt},
 		{Role: "user", Content: ai.GenerateCollectionUserPrompt(body.CollectionName, body.Description, body.WordCount, targetDifficulty)},
 	}, ai.ChatOptions{
+		Model:       model,
 		Temperature: 0.7,
-		MaxTokens:   4000,
+		MaxTokens:   maxTokensForGeneratedWords(body.WordCount),
 		JSONMode:    true,
 	})
 	if err != nil {
@@ -205,6 +217,29 @@ func (h *handlers) aiGenerateCollection(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeJSON(w, http.StatusOK, generateCollectionResponse{Words: raw.Words})
+}
+
+func requestedModel(w http.ResponseWriter, model string) (string, bool) {
+	model = ai.NormalizeModelID(model)
+	if model == "" {
+		return "", true
+	}
+	if !ai.IsAllowedModel(model) {
+		writeError(w, http.StatusBadRequest, "unsupported_model", "model is not supported")
+		return "", false
+	}
+	return model, true
+}
+
+func maxTokensForGeneratedWords(count int) int {
+	maxTokens := 1500 + count*120
+	if maxTokens < 4000 {
+		return 4000
+	}
+	if maxTokens > 14000 {
+		return 14000
+	}
+	return maxTokens
 }
 
 // handleAIError turns errors from the ai package into the right HTTP

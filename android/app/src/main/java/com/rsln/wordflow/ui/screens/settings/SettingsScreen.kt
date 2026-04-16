@@ -16,7 +16,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rsln.wordflow.WordFlowApp
+import com.rsln.wordflow.data.remote.AiModel
 import com.rsln.wordflow.notification.NotificationScheduler
+import com.rsln.wordflow.ui.components.AiModelPickerDialog
 import com.rsln.wordflow.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -31,8 +33,10 @@ fun SettingsScreen(
     val activeStartHour by viewModel.activeStartHour.collectAsState()
     val activeEndHour by viewModel.activeEndHour.collectAsState()
     val widgetRefreshSeconds by viewModel.widgetRefreshSeconds.collectAsState()
+    val defaultAiModel by viewModel.defaultAiModel.collectAsState()
     val syncMessage by viewModel.syncMessage.collectAsState()
     val currentEmail by viewModel.currentEmail.collectAsState()
+    var showDefaultModelPicker by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -116,6 +120,44 @@ fun SettingsScreen(
                         ) {
                             Text("Sign out")
                         }
+                    }
+                }
+            }
+
+            // AI Settings
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "AI",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Primary,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+            }
+
+            item {
+                SettingsCard {
+                    Text(
+                        text = "Default model",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = OnSurface
+                    )
+                    Text(
+                        text = "Used for AI collections. Add Words starts with this model unless you pick another one there.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = OnSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = { showDefaultModelPicker = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Outlined.Tune, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(AiModel.displayName(defaultAiModel))
                     }
                 }
             }
@@ -378,6 +420,15 @@ fun SettingsScreen(
 
             item { Spacer(modifier = Modifier.height(24.dp)) }
         }
+    }
+
+    if (showDefaultModelPicker) {
+        AiModelPickerDialog(
+            selectedModel = defaultAiModel,
+            title = "Default AI model",
+            onSelect = viewModel::setDefaultAiModel,
+            onDismiss = { showDefaultModelPicker = false }
+        )
     }
 }
 

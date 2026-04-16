@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.rsln.wordflow.data.local.SettingsDataStore
 import com.rsln.wordflow.data.local.entity.CollectionEntity
 import com.rsln.wordflow.data.local.entity.WordEntity
+import com.rsln.wordflow.data.remote.AiModel
 import com.rsln.wordflow.data.remote.AiTranslationResult
 import com.rsln.wordflow.data.remote.OpenRouterService
 import com.rsln.wordflow.data.repository.CollectionRepository
@@ -54,6 +55,9 @@ class AddWordViewModel(
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message
 
+    private val _selectedAiModel = MutableStateFlow(AiModel.DEFAULT_MODEL_ID)
+    val selectedAiModel: StateFlow<String> = _selectedAiModel
+
     // Pre-applied collection name for all drafts (from generate flow)
     private val _preAppliedCollection = MutableStateFlow<String?>(null)
     val preAppliedCollection: StateFlow<String?> = _preAppliedCollection
@@ -67,12 +71,25 @@ class AddWordViewModel(
                 if (saved.isNotBlank()) _inputText.value = saved
             }
         }
+        viewModelScope.launch {
+            val lastModel = settingsDataStore.lastAiModel.first()
+            val defaultModel = settingsDataStore.defaultAiModel.first()
+            _selectedAiModel.value = AiModel.normalize(lastModel.ifBlank { defaultModel })
+        }
     }
 
     fun updateInput(text: String) {
         _inputText.value = text
         viewModelScope.launch {
             settingsDataStore.set(SettingsDataStore.ADD_WORD_DRAFT, text)
+        }
+    }
+
+    fun selectAiModel(model: String) {
+        val normalized = AiModel.normalize(model)
+        _selectedAiModel.value = normalized
+        viewModelScope.launch {
+            settingsDataStore.set(SettingsDataStore.LAST_AI_MODEL, normalized)
         }
     }
 
@@ -92,6 +109,8 @@ class AddWordViewModel(
         _isTranslating.value = true
 
         viewModelScope.launch {
+            val model = AiModel.normalize(_selectedAiModel.value)
+            settingsDataStore.set(SettingsDataStore.LAST_AI_MODEL, model)
             val existingCollections = collectionRepository.getAllCollectionsList().map { it.name }
 
             drafts.forEachIndexed { index, draft ->
@@ -112,7 +131,7 @@ class AddWordViewModel(
                         selectedCollectionIds = collectionIds.toMutableList()
                     )
                 } else {
-                    val result = openRouterService.translateWord(draft.input, existingCollections)
+                    val result = openRouterService.translateWord(draft.input, existingCollections, model)
                     result.fold(
                         onSuccess = { ai ->
                             val matchedIds = mutableListOf<Long>()

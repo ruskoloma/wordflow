@@ -19,6 +19,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.rsln.wordflow.WordFlowApp
+import com.rsln.wordflow.data.remote.AiModel
 import com.rsln.wordflow.ui.screens.addword.AddWordScreen
 import com.rsln.wordflow.ui.screens.addword.GeneratedWord
 import com.rsln.wordflow.ui.screens.collectiondetail.CollectionDetailScreen
@@ -39,6 +40,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 
 sealed class Screen(val route: String, val title: String) {
     data object Learning : Screen("learning", "Home")
@@ -197,8 +199,9 @@ fun WordFlowNavHost(app: WordFlowApp, startRoute: String? = null) {
 
                 LaunchedEffect(Unit) {
                     scope.launch {
+                        val model = AiModel.normalize(app.container.settingsDataStore.defaultAiModel.first())
                         val result = app.container.openRouterService.generateCollectionWords(
-                            name, description, count, difficulty
+                            name, description, count, difficulty, model
                         )
                         result.fold(
                             onSuccess = { aiResults ->

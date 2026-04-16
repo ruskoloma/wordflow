@@ -23,6 +23,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rsln.wordflow.WordFlowApp
+import com.rsln.wordflow.data.remote.AiModel
 import com.rsln.wordflow.ui.components.*
 import com.rsln.wordflow.ui.theme.*
 
@@ -37,6 +38,8 @@ fun AddWordScreen(
     val message by viewModel.message.collectAsState()
     val allCollections by viewModel.allCollections.collectAsState()
     val preAppliedCollection by viewModel.preAppliedCollection.collectAsState()
+    val selectedAiModel by viewModel.selectedAiModel.collectAsState()
+    var showModelPicker by remember { mutableStateOf(false) }
 
     // Check for pending generated words from Collections -> Generate flow
     LaunchedEffect(Unit) {
@@ -105,6 +108,20 @@ fun AddWordScreen(
                         unfocusedContainerColor = CardSurface
                     )
                 )
+            }
+
+            item {
+                OutlinedButton(
+                    onClick = { showModelPicker = true },
+                    enabled = !isTranslating,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    contentPadding = PaddingValues(vertical = 12.dp, horizontal = 14.dp)
+                ) {
+                    Icon(Icons.Outlined.Tune, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Model: ${AiModel.displayName(selectedAiModel)}")
+                }
             }
 
             item {
@@ -230,6 +247,15 @@ fun AddWordScreen(
 
             item { Spacer(modifier = Modifier.height(4.dp)) }
         }
+    }
+
+    if (showModelPicker) {
+        AiModelPickerDialog(
+            selectedModel = selectedAiModel,
+            title = "Translation model",
+            onSelect = viewModel::selectAiModel,
+            onDismiss = { showModelPicker = false }
+        )
     }
 }
 

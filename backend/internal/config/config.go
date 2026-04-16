@@ -43,7 +43,7 @@ type Config struct {
 	// change; the full list of candidates lives in
 	// android/app/src/main/java/com/rsln/wordflow/data/remote/AiModels.kt.
 	OpenrouterAPIKey string `envconfig:"OPENROUTER_API_KEY"`
-	OpenrouterModel  string `envconfig:"OPENROUTER_MODEL" default:"openai/gpt-4o-mini"`
+	OpenrouterModel  string `envconfig:"OPENROUTER_MODEL" default:"google/gemini-2.5-flash-lite"`
 }
 
 // Load reads the environment into a Config. Called once from main.

@@ -51,7 +51,8 @@ class OpenRouterService(
      */
     suspend fun translateWord(
         word: String,
-        existingCollections: List<String>
+        existingCollections: List<String>,
+        model: String
     ): Result<AiTranslationResult> = withContext(Dispatchers.IO) {
         try {
             if (!authManager.isSignedIn()) {
@@ -61,7 +62,8 @@ class OpenRouterService(
             val requestBody = gson.toJson(
                 mapOf(
                     "word" to word,
-                    "existing_collections" to existingCollections
+                    "existing_collections" to existingCollections,
+                    "model" to AiModel.normalize(model)
                 )
             )
             val responseBody = backendClient.postAi("/v1/ai/translate", requestBody)
@@ -117,7 +119,8 @@ class OpenRouterService(
         collectionName: String,
         description: String,
         wordCount: Int,
-        targetDifficulty: Int = 5
+        targetDifficulty: Int = 5,
+        model: String
     ): Result<List<AiTranslationResult>> = withContext(Dispatchers.IO) {
         try {
             if (!authManager.isSignedIn()) {
@@ -129,7 +132,8 @@ class OpenRouterService(
                     "collection_name" to collectionName,
                     "description" to description,
                     "word_count" to wordCount,
-                    "target_difficulty" to targetDifficulty
+                    "target_difficulty" to targetDifficulty,
+                    "model" to AiModel.normalize(model)
                 )
             )
             val responseBody = backendClient.postAi("/v1/ai/generate-collection", requestBody)

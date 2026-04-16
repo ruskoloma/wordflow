@@ -19,6 +19,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rsln.wordflow.WordFlowApp
+import com.rsln.wordflow.data.remote.AiModel
 import com.rsln.wordflow.ui.components.*
 import com.rsln.wordflow.ui.theme.*
 
@@ -53,6 +54,7 @@ fun CollectionsScreen(
     val collectionsWithWords by viewModel.collectionsWithWords.collectAsState()
     val showCreateDialog by viewModel.showCreateDialog.collectAsState()
     val deleteTarget by viewModel.deleteTarget.collectAsState()
+    val defaultAiModel by app.container.settingsDataStore.defaultAiModel.collectAsState(initial = AiModel.DEFAULT_MODEL_ID)
 
     var newCollectionName by remember { mutableStateOf("") }
     var showExplore by remember { mutableStateOf(false) }
@@ -365,6 +367,13 @@ fun CollectionsScreen(
                             unfocusedBorderColor = OutlineVariant
                         )
                     )
+                    Column {
+                        Text(
+                            text = "Model: ${AiModel.displayName(defaultAiModel)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = OnSurfaceVariant
+                        )
+                    }
                     Column {
                         Row(
                             modifier = Modifier.fillMaxWidth(),

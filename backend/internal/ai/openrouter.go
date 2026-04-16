@@ -86,6 +86,7 @@ type Message struct {
 
 // ChatOptions tune the completion beyond the message list.
 type ChatOptions struct {
+	Model       string
 	Temperature float64
 	MaxTokens   int
 	// JSONMode=true asks OpenRouter to set response_format=json_object,
@@ -124,8 +125,16 @@ func (c *Client) ChatCompletion(ctx context.Context, messages []Message, opts Ch
 		return "", ErrNotConfigured
 	}
 
+	model := NormalizeModelID(opts.Model)
+	if model == "" {
+		model = NormalizeModelID(c.model)
+	}
+	if model == "" {
+		model = DefaultModel
+	}
+
 	body := map[string]any{
-		"model":    c.model,
+		"model":    model,
 		"messages": messages,
 	}
 	if opts.Temperature > 0 {

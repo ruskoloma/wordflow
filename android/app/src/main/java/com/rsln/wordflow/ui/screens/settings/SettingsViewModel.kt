@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.rsln.wordflow.data.auth.AuthManager
 import com.rsln.wordflow.data.local.SettingsDataStore
 import com.rsln.wordflow.data.local.entity.WordEntity
+import com.rsln.wordflow.data.remote.AiModel
 import com.rsln.wordflow.data.repository.CollectionRepository
 import com.rsln.wordflow.data.repository.WordRepository
 import com.rsln.wordflow.data.sync.SyncService
@@ -20,14 +21,8 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 
 /**
- * Settings VM — notification schedule, widget prefs, CSV
+ * Settings VM — notification schedule, widget prefs, AI defaults, CSV
  * import/export, app updates, and the sign-out control.
- *
- * OpenRouter API key, model picker, "Sync now" and "Test backend"
- * buttons are all gone — the backend owns the model, sync runs
- * automatically on app launch / sign-in, and the dev testConnection
- * path isn't worth surfacing once the login flow is proving
- * connectivity end-to-end.
  */
 class SettingsViewModel(
     private val settingsDataStore: SettingsDataStore,
@@ -42,6 +37,11 @@ class SettingsViewModel(
     val activeStartHour = settingsDataStore.activeStartHour.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 9)
     val activeEndHour = settingsDataStore.activeEndHour.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 22)
     val widgetRefreshSeconds = settingsDataStore.widgetRefreshSeconds.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 35)
+    val defaultAiModel = settingsDataStore.defaultAiModel.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        AiModel.DEFAULT_MODEL_ID
+    )
 
     val currentEmail: StateFlow<String?> = authManager.currentEmail
 
@@ -53,6 +53,9 @@ class SettingsViewModel(
     fun setActiveStartHour(value: Int) = viewModelScope.launch { settingsDataStore.set(SettingsDataStore.ACTIVE_START_HOUR, value) }
     fun setActiveEndHour(value: Int) = viewModelScope.launch { settingsDataStore.set(SettingsDataStore.ACTIVE_END_HOUR, value) }
     fun setWidgetRefreshSeconds(value: Int) = viewModelScope.launch { settingsDataStore.set(SettingsDataStore.WIDGET_REFRESH_SECONDS, value) }
+    fun setDefaultAiModel(value: String) = viewModelScope.launch {
+        settingsDataStore.set(SettingsDataStore.DEFAULT_AI_MODEL, AiModel.normalize(value))
+    }
 
     // ---------- Auth ----------
 
