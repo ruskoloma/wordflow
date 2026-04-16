@@ -1,0 +1,34 @@
+# Railway build + deploy config for the WordFlow Go backend.
+#
+# Railway picks this up automatically when the service's Root
+# Directory is set to backend/. The Dockerfile already bakes
+# /migrate + /migrations into the image, so the preDeployCommand
+# below can run migrations against the same binary that ends up
+# serving traffic.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+# Health check probes /health on the assigned $PORT. Our handler
+# pings the pool and returns 503 if the DB is unreachable, so
+# Railway will hold traffic on a dead-DB deploy.
+healthcheckPath = "/health"
+healthcheckTimeout = 60
+
+# Run migrations before the new revision starts serving traffic.
+# Railway invokes this in a one-shot container built from the
+# same image, expanding $DATABASE_URL from the service's env vars.
+# If the command exits non-zero the deploy is aborted and the
+# current revision keeps serving — exactly what you want for
+# migration safety.
+preDeployCommand = "/migrate -path /migrations -database $DATABASE_URL up"
+
+# Start command. ENTRYPOINT in the Dockerfile is already /server,
+# so this is explicit-for-clarity rather than strictly necessary.
+startCommand = "/server"
+
+# Auto-restart a crashed process a few times before giving up.
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
