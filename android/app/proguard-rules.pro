@@ -10,3 +10,6 @@
 # OkHttp
 -dontwarn okhttp3.**
 -dontwarn okio.**
+
+# Tink references compile-time Error Prone annotations that are not needed at runtime.
+-dontwarn com.google.errorprone.annotations.**

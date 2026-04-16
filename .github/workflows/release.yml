@@ -22,17 +22,21 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
 
       - name: Create local.properties
+        working-directory: android
         run: |
           echo "sdk.dir=/usr/local/lib/android/sdk" > local.properties
+          echo "WORDFLOW_BACKEND_URL=${{ vars.WORDFLOW_BACKEND_URL || 'https://wordflow-production-916f.up.railway.app' }}" >> local.properties
           echo "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}" >> local.properties
           echo "AWS_ACCESS_KEY=${{ secrets.AWS_ACCESS_KEY }}" >> local.properties
           echo "AWS_SECRET_KEY=${{ secrets.AWS_SECRET_KEY }}" >> local.properties
           echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> local.properties
 
       - name: Build Release APK
+        working-directory: android
         run: ./gradlew assembleRelease
 
       - name: Build Debug APK
+        working-directory: android
         run: ./gradlew assembleDebug
 
       - name: Get version from tag
@@ -45,6 +49,6 @@ jobs:
           name: "WordFlow v${{ steps.version.outputs.VERSION }}"
           generate_release_notes: true
           files: |
-            app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/debug/app-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

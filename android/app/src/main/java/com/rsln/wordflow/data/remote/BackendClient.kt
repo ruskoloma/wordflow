@@ -24,10 +24,9 @@ import java.util.concurrent.TimeUnit
  * catch the exception and map it to UI state (toast, error state,
  * etc.).
  *
- * Base URL comes from BuildConfig.BACKEND_URL, which defaults to
- * 10.0.2.2:8080 (the Android emulator's alias for the host machine's
- * localhost). Override via WORDFLOW_BACKEND_URL=... in
- * android/local.properties to point a physical device at your LAN IP.
+ * Base URL comes from BuildConfig.BACKEND_URL. Production builds default
+ * to the hosted backend. Override via WORDFLOW_BACKEND_URL=... in
+ * android/local.properties for local development.
  */
 class BackendClient(private val authManager: AuthManager) {
 

@@ -11,6 +11,15 @@ val localProps = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
+fun configValue(name: String, defaultValue: String): String =
+    providers.gradleProperty(name).orNull
+        ?: localProps.getProperty(name)
+        ?: System.getenv(name)
+        ?: defaultValue
+
+fun buildConfigString(value: String): String =
+    "\"${value.trim().replace("\\", "\\\\").replace("\"", "\\\"")}\""
+
 android {
     namespace = "com.rsln.wordflow"
     compileSdk = 34
@@ -19,18 +28,20 @@ android {
         applicationId = "com.rsln.wordflow"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
 
         val openRouterKey = localProps.getProperty("OPENROUTER_API_KEY", "")
         buildConfigField("String", "OPENROUTER_API_KEY", "\"$openRouterKey\"")
 
-        // Backend base URL for the Go API. Default is 10.0.2.2 (the
-        // emulator's alias for the host machine's localhost). Override
-        // in local.properties with WORDFLOW_BACKEND_URL=http://192.168.x.x:8080
-        // to point a physical device at your Mac on the LAN.
-        val backendUrl = localProps.getProperty("WORDFLOW_BACKEND_URL", "http://10.0.2.2:8080")
-        buildConfigField("String", "BACKEND_URL", "\"$backendUrl\"")
+        // Backend base URL for the Go API. Release builds should use the
+        // hosted Railway URL. Override locally with WORDFLOW_BACKEND_URL in
+        // local.properties, a Gradle property, or an environment variable.
+        val backendUrl = configValue(
+            "WORDFLOW_BACKEND_URL",
+            "https://wordflow-production-916f.up.railway.app"
+        )
+        buildConfigField("String", "BACKEND_URL", buildConfigString(backendUrl))
     }
 
     buildTypes {

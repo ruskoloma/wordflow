@@ -11,8 +11,11 @@ Personal English-to-Russian vocabulary learning app for Android.
 
 ### local.properties
 
-Add your keys to `local.properties` (gitignored):
+Add your local overrides to `local.properties` (gitignored). The backend URL
+defaults to the hosted Railway backend; override it when testing against a
+local server or LAN device.
 ```properties
+WORDFLOW_BACKEND_URL=http://10.0.2.2:8080
 OPENROUTER_API_KEY=sk-or-v1-your-key-here
 AWS_ACCESS_KEY=your-access-key
 AWS_SECRET_KEY=your-secret-key
@@ -56,6 +59,9 @@ For automated builds, add these repo secrets (`Settings > Secrets > Actions`):
 - `AWS_ACCESS_KEY`
 - `AWS_SECRET_KEY`
 - `AWS_REGION`
+
+Optional repo variable:
+- `WORDFLOW_BACKEND_URL` defaults to `https://wordflow-production-916f.up.railway.app`
 
 ## Self-Update
 
