@@ -154,7 +154,7 @@ data class AuthResponse(
 // ----- Error bodies -----
 
 data class ErrorResponse(
-    @SerializedName("error") val error: String = "",
-    @SerializedName("message") val message: String = "",
+    @SerializedName("error") val error: String? = null,
+    @SerializedName("message") val message: String? = null,
     @SerializedName("existing_id") val existingId: String? = null
 )

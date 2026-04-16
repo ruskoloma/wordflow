@@ -212,16 +212,28 @@ class BackendClient(private val authManager: AuthManager) {
             throw when (status) {
                 401 -> {
                     authManager.signOut()
-                    BackendException.Unauthorized(errorBody.message.ifBlank { "not signed in or token expired" })
+                    BackendException.Unauthorized(errorBody.messageOr("not signed in or token expired"))
                 }
-                404 -> BackendException.NotFound(errorBody.message.ifBlank { "not found" })
-                409 -> BackendException.Conflict(errorBody.error, errorBody.existingId)
-                429 -> BackendException.RateLimited(errorBody.message.ifBlank { "rate limit exceeded" })
-                in 500..599 -> BackendException.Server(status, errorBody.error.ifBlank { body.take(200) })
-                else -> BackendException.Http(status, errorBody.error.ifBlank { body.take(200) })
+                404 -> BackendException.NotFound(errorBody.messageOr("not found"))
+                409 -> BackendException.Conflict(errorBody.codeOr("conflict"), errorBody.existingId)
+                429 -> BackendException.RateLimited(errorBody.messageOr("rate limit exceeded"))
+                in 500..599 -> BackendException.Server(status, errorBody.codeOr(body.take(200)))
+                else -> BackendException.Http(status, errorBody.messageOr(errorBody.codeOr(body.take(200))))
             }
         }
     }
+
+    private fun ErrorResponse.messageOr(fallback: String): String =
+        message?.takeIf { it.isNotBlank() }
+            ?: error?.takeIf { it.isNotBlank() }
+            ?: fallback.takeIf { it.isNotBlank() }
+            ?: "request failed"
+
+    private fun ErrorResponse.codeOr(fallback: String): String =
+        error?.takeIf { it.isNotBlank() }
+            ?: message?.takeIf { it.isNotBlank() }
+            ?: fallback.takeIf { it.isNotBlank() }
+            ?: "request_failed"
 
     companion object {
         private val JSON_MEDIA_TYPE = "application/json".toMediaType()

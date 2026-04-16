@@ -1,11 +1,14 @@
 # WordFlow ProGuard Rules
 -keepattributes *Annotation*
 -keep class com.rsln.wordflow.data.local.entity.** { *; }
--keep class com.rsln.wordflow.data.remote.AiModels** { *; }
+-keep class com.rsln.wordflow.data.remote.** { *; }
 
 # Gson
 -keepattributes Signature
 -keep class com.google.gson.** { *; }
+-keepclassmembers class * {
+    @com.google.gson.annotations.SerializedName <fields>;
+}
 
 # OkHttp
 -dontwarn okhttp3.**
