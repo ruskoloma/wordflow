@@ -16,10 +16,10 @@
 --     an UPDATE that sets deleted_at + updated_at. Tombstones are still
 --     visible in /v1/sync/pull so client caches can drop them.
 --
---   * updated_at is the pull cursor. The application sets it to now() on
---     every write (insert, update, or soft-delete). /v1/sync/pull filters
---     by WHERE updated_at > $since, so a single timestamp column handles
---     both normal edits and deletes.
+--   * updated_at is the pull cursor. Inserts use the column default;
+--     updates and soft-deletes set it from statement_timestamp().
+--     /v1/sync/pull filters by WHERE updated_at > $since, so a single
+--     timestamp column handles both normal edits and deletes.
 --
 --   * Partial unique indexes on the natural keys (user_id, normalized_word)
 --     and (user_id, name) let us tombstone a row and later re-create one

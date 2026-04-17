@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"time"
@@ -82,15 +81,26 @@ func (h *handlers) createWord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Required-field validation. The DB would reject these anyway, but
-	// a 400 with a specific message is way friendlier than a 500.
+	body.OriginalWord = trimRequiredString(body.OriginalWord)
+	body.NormalizedWord = normalizeWord(body.NormalizedWord)
+	body.Translation = trimRequiredString(body.Translation)
+	body.ExampleUsage = trimRequiredString(body.ExampleUsage)
+	body.Explanation = trimRequiredString(body.Explanation)
+	body.Pronunciation = trimRequiredString(body.Pronunciation)
 	if body.OriginalWord == "" || body.NormalizedWord == "" || body.Translation == "" {
 		writeError(w, http.StatusBadRequest, "missing_fields",
 			"original_word, normalized_word, and translation are required")
 		return
 	}
+	if body.Difficulty != nil && !validDifficulty(*body.Difficulty) {
+		writeError(w, http.StatusBadRequest, "invalid_difficulty", "difficulty must be between 1 and 10")
+		return
+	}
+	if body.ID != nil && *body.ID == uuid.Nil {
+		writeError(w, http.StatusBadRequest, "invalid_id", "id must be a UUID")
+		return
+	}
 
-	// Fill defaults for optional fields.
 	id := uuid.New()
 	if body.ID != nil {
 		id = *body.ID
@@ -124,22 +134,7 @@ func (h *handlers) createWord(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
-			// Two possible unique violations on this table:
-			//   1. (user_id, normalized_word) — natural key collision
-			//   2. id — client reused a UUID we already have
-			// We distinguish by looking up the live row. If found by
-			// normalized_word, it's case (1) → return existing_id.
-			// If not, it must be case (2), same handling works.
-			existing, lookupErr := q.FindLiveWordByNormalized(r.Context(), sqlc.FindLiveWordByNormalizedParams{
-				UserID:         userID,
-				NormalizedWord: body.NormalizedWord,
-			})
-			if lookupErr != nil {
-				h.logger.Error("word 409 lookup failed", "err", lookupErr)
-				writeError(w, http.StatusInternalServerError, "internal", "lookup failed after conflict")
-				return
-			}
-			writeConflict(w, "word_exists", existing.ID)
+			h.writeCreateWordConflict(w, r, q, userID, body.NormalizedWord, id)
 			return
 		}
 		h.logger.Error("create word", "err", err)
@@ -164,6 +159,23 @@ func (h *handlers) updateWord(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &body) {
 		return
 	}
+	trimOptionalString(body.OriginalWord)
+	trimOptionalString(body.Translation)
+	trimOptionalString(body.ExampleUsage)
+	trimOptionalString(body.Explanation)
+	trimOptionalString(body.Pronunciation)
+	if body.OriginalWord != nil && *body.OriginalWord == "" {
+		writeError(w, http.StatusBadRequest, "invalid_fields", "original_word cannot be empty")
+		return
+	}
+	if body.Translation != nil && *body.Translation == "" {
+		writeError(w, http.StatusBadRequest, "invalid_fields", "translation cannot be empty")
+		return
+	}
+	if body.Difficulty != nil && !validDifficulty(*body.Difficulty) {
+		writeError(w, http.StatusBadRequest, "invalid_difficulty", "difficulty must be between 1 and 10")
+		return
+	}
 
 	q := sqlc.New(h.pool)
 	word, err := q.UpdateWord(r.Context(), sqlc.UpdateWordParams{
@@ -182,6 +194,15 @@ func (h *handlers) updateWord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
+		if isUniqueViolation(err) {
+			if body.OriginalWord == nil {
+				h.logger.Error("word unique violation without original_word", "err", err, "word_id", id)
+				writeError(w, http.StatusInternalServerError, "internal", "db error")
+				return
+			}
+			h.writeWordExistsConflict(w, r, q, userID, normalizeWord(*body.OriginalWord))
+			return
+		}
 		h.logger.Error("update word", "err", err, "word_id", id)
 		writeError(w, http.StatusInternalServerError, "internal", "db error")
 		return
@@ -238,6 +259,16 @@ func (h *handlers) batchProgress(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &body) {
 		return
 	}
+	for _, u := range body.Updates {
+		if u.ID == uuid.Nil {
+			writeError(w, http.StatusBadRequest, "invalid_id", "update id must be a UUID")
+			return
+		}
+		if u.ShowCount < 0 {
+			writeError(w, http.StatusBadRequest, "invalid_progress", "show_count cannot be negative")
+			return
+		}
+	}
 
 	if len(body.Updates) == 0 {
 		writeJSON(w, http.StatusOK, progressBatchResponse{
@@ -253,19 +284,17 @@ func (h *handlers) batchProgress(w http.ResponseWriter, r *http.Request) {
 	applied := 0
 	if err := h.inTx(r.Context(), func(q *sqlc.Queries) error {
 		for _, u := range body.Updates {
-			// UpdateWordProgress only touches live rows (WHERE
-			// deleted_at IS NULL), so a missing/deleted word is
-			// silently skipped. We don't count those as applied.
-			if err := q.UpdateWordProgress(r.Context(), sqlc.UpdateWordProgressParams{
+			rows, err := q.UpdateWordProgress(r.Context(), sqlc.UpdateWordProgressParams{
 				ID:            u.ID,
 				UserID:        userID,
 				ShowCount:     u.ShowCount,
 				LastShownDate: u.LastShownDate,
 				IsLearned:     u.IsLearned,
-			}); err != nil {
+			})
+			if err != nil {
 				return err
 			}
-			applied++
+			applied += int(rows)
 		}
 		return nil
 	}); err != nil {
@@ -280,25 +309,45 @@ func (h *handlers) batchProgress(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ---------- Tx helper -----------------------------------------------
-
-// inTx is a tiny helper that wraps a block in a transaction and rolls
-// back on any error. fn gets a *sqlc.Queries scoped to the tx, so all
-// its calls go through the same connection and share the tx's snapshot.
-//
-// This is the standard "do some writes atomically" pattern in Go — the
-// deferred Rollback is a no-op after a successful Commit, so it's safe
-// to call unconditionally.
-func (h *handlers) inTx(ctx context.Context, fn func(*sqlc.Queries) error) error {
-	tx, err := h.pool.Begin(ctx)
-	if err != nil {
-		return err
+func (h *handlers) writeCreateWordConflict(
+	w http.ResponseWriter,
+	r *http.Request,
+	q *sqlc.Queries,
+	userID string,
+	normalizedWord string,
+	id uuid.UUID,
+) {
+	existing, err := q.FindLiveWordByNormalized(r.Context(), sqlc.FindLiveWordByNormalizedParams{
+		UserID:         userID,
+		NormalizedWord: normalizedWord,
+	})
+	if err == nil {
+		writeConflict(w, "word_exists", existing.ID)
+		return
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	q := sqlc.New(h.pool).WithTx(tx)
-	if err := fn(q); err != nil {
-		return err
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeConflict(w, "word_id_exists", id)
+		return
 	}
-	return tx.Commit(ctx)
+	h.logger.Error("word conflict lookup failed", "err", err)
+	writeError(w, http.StatusInternalServerError, "internal", "lookup failed after conflict")
+}
+
+func (h *handlers) writeWordExistsConflict(
+	w http.ResponseWriter,
+	r *http.Request,
+	q *sqlc.Queries,
+	userID string,
+	normalizedWord string,
+) {
+	existing, err := q.FindLiveWordByNormalized(r.Context(), sqlc.FindLiveWordByNormalizedParams{
+		UserID:         userID,
+		NormalizedWord: normalizedWord,
+	})
+	if err == nil {
+		writeConflict(w, "word_exists", existing.ID)
+		return
+	}
+	h.logger.Error("word conflict lookup failed", "err", err)
+	writeError(w, http.StatusInternalServerError, "internal", "lookup failed after conflict")
 }

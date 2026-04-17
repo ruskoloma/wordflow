@@ -34,24 +34,9 @@ type syncPullResponse struct {
 // syncPull is GET /v1/sync/pull?since=<RFC3339>.
 //
 // Correctness-sensitive details:
-//
-//   - We open a READ ONLY + REPEATABLE READ transaction. This gives us a
-//     consistent snapshot of the database across the three SELECTs:
-//     if a concurrent write on another device commits between our
-//     SELECT words and SELECT collections, our snapshot stays on the
-//     pre-commit view, so we don't return a partial world where a link
-//     references a word we haven't listed.
-//
-//   - serverTime is captured IMMEDIATELY after BeginTx (i.e. as close
-//     as possible to the transaction's snapshot time). We return it as
-//     the new cursor; on the next pull, the client sends it back as
-//     ?since. Any row committed AFTER this moment will have an
-//     updated_at > serverTime and be picked up by that next pull.
-//
-//   - The default "since" when the param is absent or empty is the zero
-//     time.Time, which in Postgres compares as `'0001-01-01 00:00:00+00'`
-//     — smaller than any real updated_at, so every live row comes back.
-//     That's the initial-full-sync path.
+//   - REPEATABLE READ gives the three SELECTs one consistent snapshot.
+//   - server_time comes from Postgres, not the app server clock.
+//   - Empty ?since means time.Time{}, which is older than real rows.
 func (h *handlers) syncPull(w http.ResponseWriter, r *http.Request) {
 	userID := auth.MustUserIDFromCtx(r.Context())
 
@@ -85,11 +70,13 @@ func (h *handlers) syncPull(w http.ResponseWriter, r *http.Request) {
 	// deferring it is just insurance against early returns.
 	defer func() { _ = tx.Rollback(r.Context()) }()
 
-	// Capture the cursor as close to the tx snapshot as we can. This
-	// happens BEFORE any reads, so any row committed after this
-	// instant will be picked up on the next pull (its updated_at will
-	// be strictly greater than this serverTime).
-	serverTime := time.Now().UTC()
+	var serverTime time.Time
+	if err := tx.QueryRow(r.Context(), "SELECT statement_timestamp()").Scan(&serverTime); err != nil {
+		h.logger.Error("sync pull server time", "err", err)
+		writeError(w, http.StatusInternalServerError, "internal", "db error")
+		return
+	}
+	serverTime = serverTime.UTC()
 
 	q := sqlc.New(h.pool).WithTx(tx)
 

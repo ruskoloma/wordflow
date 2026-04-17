@@ -40,9 +40,9 @@ import (
 // there's no per-request state on the struct itself; all that lives on
 // ClerkFrontendSession values.
 type ClerkFrontend struct {
-	http       *http.Client
-	baseURL    string // https://smiling-bedbug-57.clerk.accounts.dev
-	publicKey  string // pk_test_... or pk_live_...
+	http      *http.Client
+	baseURL   string // https://smiling-bedbug-57.clerk.accounts.dev
+	publicKey string // pk_test_... or pk_live_...
 }
 
 // ClerkFrontendSession carries the per-sign-in state between calls:
@@ -136,10 +136,8 @@ func (c *ClerkFrontend) StartSignIn(ctx context.Context, email string) (*ClerkFr
 	}, nil
 }
 
-// AttemptSignIn submits the user-provided code and, if accepted by
-// Clerk, returns the session id of the freshly-minted session. The
-// caller uses session.CreateToken from the backend SDK to turn that
-// session id into a JWT for the Android app.
+// AttemptSignIn submits the user-provided code and returns Clerk's
+// freshly-created session id when the code is accepted.
 func (c *ClerkFrontend) AttemptSignIn(ctx context.Context, session *ClerkFrontendSession, code string) (sessionID string, err error) {
 	body := url.Values{}
 	body.Set("strategy", "email_code")
@@ -185,7 +183,7 @@ func (c *ClerkFrontend) formPost(ctx context.Context, path, auth string, form ur
 	if err != nil {
 		return nil, auth, err
 	}
-	req.Header.Set("Authorization", "Bearer "+auth)
+	req.Header.Set("Authorization", "Bearer "+bearerToken(auth))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := c.http.Do(req)
@@ -203,7 +201,7 @@ func (c *ClerkFrontend) formPost(ctx context.Context, path, auth string, form ur
 	// response header. Use the new one if present.
 	newAuth := auth
 	if h := resp.Header.Get("Authorization"); h != "" {
-		newAuth = h
+		newAuth = bearerToken(h)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -309,6 +307,14 @@ func findEmailCodeFactorID(factors []clerkFirstFactor) string {
 		}
 	}
 	return ""
+}
+
+func bearerToken(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) > len("Bearer ") && strings.EqualFold(value[:len("Bearer ")], "Bearer ") {
+		return strings.TrimSpace(value[len("Bearer "):])
+	}
+	return value
 }
 
 // ------------------------------------------------------------------

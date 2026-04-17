@@ -148,8 +148,8 @@ func (q *Queries) ListCollectionsUpdatedSince(ctx context.Context, arg ListColle
 
 const softDeleteCollection = `-- name: SoftDeleteCollection :exec
 UPDATE collections
-SET deleted_at = now(),
-    updated_at = now()
+SET deleted_at = statement_timestamp(),
+    updated_at = statement_timestamp()
 WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
 `
 
@@ -172,7 +172,7 @@ UPDATE collections
 SET
     name       = COALESCE($1::text,       name),
     is_active  = COALESCE($2::bool,  is_active),
-    updated_at = now()
+    updated_at = statement_timestamp()
 WHERE id = $3
   AND user_id = $4
   AND deleted_at IS NULL

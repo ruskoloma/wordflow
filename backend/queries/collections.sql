@@ -33,7 +33,7 @@ UPDATE collections
 SET
     name       = COALESCE(sqlc.narg('name')::text,       name),
     is_active  = COALESCE(sqlc.narg('is_active')::bool,  is_active),
-    updated_at = now()
+    updated_at = statement_timestamp()
 WHERE id = sqlc.arg('id')
   AND user_id = sqlc.arg('user_id')
   AND deleted_at IS NULL
@@ -45,6 +45,6 @@ RETURNING *;
 -- the same transaction from the handler, so both rows are visible to the
 -- next sync pull.
 UPDATE collections
-SET deleted_at = now(),
-    updated_at = now()
+SET deleted_at = statement_timestamp(),
+    updated_at = statement_timestamp()
 WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL;

@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -200,59 +201,16 @@ func (c *Client) ChatCompletion(ctx context.Context, messages []Message, opts Ch
 // that some models wrap JSON responses in even when asked not to.
 // Returns the content unchanged if no fences are present.
 func StripJSONFences(s string) string {
-	s = trimWS(s)
-	s = trimPrefixFold(s, "```json")
-	s = trimPrefixFold(s, "```")
-	s = trimSuffix(s, "```")
-	return trimWS(s)
-}
-
-// Small helpers kept local so this package has zero internal deps.
-func trimWS(s string) string {
-	for len(s) > 0 && (s[0] == ' ' || s[0] == '\n' || s[0] == '\r' || s[0] == '\t') {
-		s = s[1:]
-	}
-	for len(s) > 0 && (s[len(s)-1] == ' ' || s[len(s)-1] == '\n' || s[len(s)-1] == '\r' || s[len(s)-1] == '\t') {
-		s = s[:len(s)-1]
-	}
-	return s
-}
-
-func trimPrefixFold(s, prefix string) string {
-	if len(s) < len(prefix) {
-		return s
-	}
-	if equalFold(s[:len(prefix)], prefix) {
-		return s[len(prefix):]
-	}
-	return s
-}
-
-func trimSuffix(s, suffix string) string {
-	if len(s) < len(suffix) {
-		return s
-	}
-	if s[len(s)-len(suffix):] == suffix {
-		return s[:len(s)-len(suffix)]
-	}
-	return s
-}
-
-func equalFold(a, b string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := 0; i < len(a); i++ {
-		ca, cb := a[i], b[i]
-		if ca >= 'A' && ca <= 'Z' {
-			ca += 'a' - 'A'
-		}
-		if cb >= 'A' && cb <= 'Z' {
-			cb += 'a' - 'A'
-		}
-		if ca != cb {
-			return false
+	s = strings.TrimSpace(s)
+	for _, prefix := range []string{"```json", "```"} {
+		if len(s) >= len(prefix) && strings.EqualFold(s[:len(prefix)], prefix) {
+			s = s[len(prefix):]
+			break
 		}
 	}
-	return true
+	s = strings.TrimSpace(s)
+	if strings.HasSuffix(s, "```") {
+		s = s[:len(s)-3]
+	}
+	return strings.TrimSpace(s)
 }

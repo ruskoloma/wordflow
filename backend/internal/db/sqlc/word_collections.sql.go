@@ -18,8 +18,21 @@ INSERT INTO word_collections (
     user_id,
     word_id,
     collection_id
-) VALUES (
-    $1, $2, $3, $4
+)
+SELECT $1, $2, $3, $4
+WHERE EXISTS (
+    SELECT 1
+    FROM words
+    WHERE id = $3
+      AND user_id = $2
+      AND deleted_at IS NULL
+)
+AND EXISTS (
+    SELECT 1
+    FROM collections
+    WHERE id = $4
+      AND user_id = $2
+      AND deleted_at IS NULL
 )
 RETURNING id, user_id, word_id, collection_id, created_at, updated_at, deleted_at
 `
@@ -131,8 +144,8 @@ func (q *Queries) ListWordCollectionsUpdatedSince(ctx context.Context, arg ListW
 
 const softDeleteLinksByCollection = `-- name: SoftDeleteLinksByCollection :exec
 UPDATE word_collections
-SET deleted_at = now(),
-    updated_at = now()
+SET deleted_at = statement_timestamp(),
+    updated_at = statement_timestamp()
 WHERE user_id = $1 AND collection_id = $2 AND deleted_at IS NULL
 `
 
@@ -149,8 +162,8 @@ func (q *Queries) SoftDeleteLinksByCollection(ctx context.Context, arg SoftDelet
 
 const softDeleteLinksByWord = `-- name: SoftDeleteLinksByWord :exec
 UPDATE word_collections
-SET deleted_at = now(),
-    updated_at = now()
+SET deleted_at = statement_timestamp(),
+    updated_at = statement_timestamp()
 WHERE user_id = $1 AND word_id = $2 AND deleted_at IS NULL
 `
 
@@ -169,8 +182,8 @@ func (q *Queries) SoftDeleteLinksByWord(ctx context.Context, arg SoftDeleteLinks
 
 const softDeleteWordCollection = `-- name: SoftDeleteWordCollection :exec
 UPDATE word_collections
-SET deleted_at = now(),
-    updated_at = now()
+SET deleted_at = statement_timestamp(),
+    updated_at = statement_timestamp()
 WHERE user_id = $1
   AND word_id = $2
   AND collection_id = $3

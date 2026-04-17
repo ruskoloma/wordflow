@@ -1,9 +1,11 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/rsln-ua/wordflow-backend/internal/auth"
 	"github.com/rsln-ua/wordflow-backend/internal/db/sqlc"
@@ -31,9 +33,11 @@ func (h *handlers) linkWordCollection(w http.ResponseWriter, r *http.Request) {
 		CollectionID: collectionID,
 	})
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "not_found", "word or collection not found")
+			return
+		}
 		if isUniqueViolation(err) {
-			// The (user_id, word_id, collection_id) pair already
-			// has a live row. Look it up so the client can reconcile.
 			existing, lookupErr := q.FindLiveWordCollection(r.Context(), sqlc.FindLiveWordCollectionParams{
 				UserID:       userID,
 				WordID:       wordID,
@@ -47,10 +51,10 @@ func (h *handlers) linkWordCollection(w http.ResponseWriter, r *http.Request) {
 			writeConflict(w, "link_exists", existing.ID)
 			return
 		}
-		// A missing word or collection triggers foreign key violation
-		// (SQLSTATE 23503). We don't distinguish from other errors
-		// right now — the simplest path is to let the client retry
-		// after a sync pull that'll show the missing rows.
+		if isForeignKeyViolation(err) {
+			writeError(w, http.StatusNotFound, "not_found", "word or collection not found")
+			return
+		}
 		h.logger.Error("create link", "err", err, "word_id", wordID, "collection_id", collectionID)
 		writeError(w, http.StatusInternalServerError, "internal", "db error")
 		return

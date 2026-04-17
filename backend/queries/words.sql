@@ -7,8 +7,8 @@
 --     query layer — no row ever leaks between users, even if an upstream
 --     handler bug forgets a check.
 --
---   * `updated_at = now()` is set on every write so the sync pull cursor
---     sees the row on the next pull. We never pass updated_at from Go.
+--   * `updated_at = statement_timestamp()` is set on every update so
+--     sync cursors use statement time instead of transaction start time.
 --
 --   * "Live" means `deleted_at IS NULL`. Queries named *Live operate only
 --     on non-tombstoned rows; plain queries (used by sync pull) return
@@ -64,17 +64,21 @@ RETURNING *;
 
 -- name: UpdateWord :one
 -- PATCH endpoint. Null args mean "don't touch." updated_at is always
--- bumped to now() because a PATCH is a mutation by definition.
+-- bumped because a PATCH is a mutation by definition.
 UPDATE words
 SET
     original_word  = COALESCE(sqlc.narg('original_word')::text,        original_word),
+    normalized_word = CASE
+        WHEN sqlc.narg('original_word')::text IS NULL THEN normalized_word
+        ELSE lower(trim(sqlc.narg('original_word')::text))
+    END,
     translation    = COALESCE(sqlc.narg('translation')::text,          translation),
     example_usage  = COALESCE(sqlc.narg('example_usage')::text,        example_usage),
     explanation    = COALESCE(sqlc.narg('explanation')::text,          explanation),
     pronunciation  = COALESCE(sqlc.narg('pronunciation')::text,        pronunciation),
     difficulty     = COALESCE(sqlc.narg('difficulty')::smallint,       difficulty),
     is_learned     = COALESCE(sqlc.narg('is_learned')::boolean,        is_learned),
-    updated_at     = now()
+    updated_at     = statement_timestamp()
 WHERE id = sqlc.arg('id')
   AND user_id = sqlc.arg('user_id')
   AND deleted_at IS NULL
@@ -84,11 +88,11 @@ RETURNING *;
 -- DELETE endpoint. Sets deleted_at (the tombstone) and bumps updated_at
 -- so the next pull propagates the delete to other devices.
 UPDATE words
-SET deleted_at = now(),
-    updated_at = now()
+SET deleted_at = statement_timestamp(),
+    updated_at = statement_timestamp()
 WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL;
 
--- name: UpdateWordProgress :exec
+-- name: UpdateWordProgress :execrows
 -- PATCH /v1/words/progress/batch, called once per id inside a single Go
 -- transaction. All three progress fields are always supplied — the client
 -- flushes a snapshot of its local state, not a delta.
@@ -96,7 +100,7 @@ UPDATE words
 SET show_count      = sqlc.arg('show_count'),
     last_shown_date = sqlc.arg('last_shown_date'),
     is_learned      = sqlc.arg('is_learned'),
-    updated_at      = now()
+    updated_at      = statement_timestamp()
 WHERE id = sqlc.arg('id')
   AND user_id = sqlc.arg('user_id')
   AND deleted_at IS NULL;

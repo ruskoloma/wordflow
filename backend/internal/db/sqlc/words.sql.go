@@ -180,8 +180,8 @@ type ListWordsUpdatedSinceParams struct {
 //     query layer — no row ever leaks between users, even if an upstream
 //     handler bug forgets a check.
 //
-//   - `updated_at = now()` is set on every write so the sync pull cursor
-//     sees the row on the next pull. We never pass updated_at from Go.
+//   - `updated_at = statement_timestamp()` is set on every update so
+//     sync cursors use statement time instead of transaction start time.
 //
 //   - "Live" means `deleted_at IS NULL`. Queries named *Live operate only
 //     on non-tombstoned rows; plain queries (used by sync pull) return
@@ -233,8 +233,8 @@ func (q *Queries) ListWordsUpdatedSince(ctx context.Context, arg ListWordsUpdate
 
 const softDeleteWord = `-- name: SoftDeleteWord :exec
 UPDATE words
-SET deleted_at = now(),
-    updated_at = now()
+SET deleted_at = statement_timestamp(),
+    updated_at = statement_timestamp()
 WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
 `
 
@@ -254,13 +254,17 @@ const updateWord = `-- name: UpdateWord :one
 UPDATE words
 SET
     original_word  = COALESCE($1::text,        original_word),
+    normalized_word = CASE
+        WHEN $1::text IS NULL THEN normalized_word
+        ELSE lower(trim($1::text))
+    END,
     translation    = COALESCE($2::text,          translation),
     example_usage  = COALESCE($3::text,        example_usage),
     explanation    = COALESCE($4::text,          explanation),
     pronunciation  = COALESCE($5::text,        pronunciation),
     difficulty     = COALESCE($6::smallint,       difficulty),
     is_learned     = COALESCE($7::boolean,        is_learned),
-    updated_at     = now()
+    updated_at     = statement_timestamp()
 WHERE id = $8
   AND user_id = $9
   AND deleted_at IS NULL
@@ -280,7 +284,7 @@ type UpdateWordParams struct {
 }
 
 // PATCH endpoint. Null args mean "don't touch." updated_at is always
-// bumped to now() because a PATCH is a mutation by definition.
+// bumped because a PATCH is a mutation by definition.
 func (q *Queries) UpdateWord(ctx context.Context, arg UpdateWordParams) (Word, error) {
 	row := q.db.QueryRow(ctx, updateWord,
 		arg.OriginalWord,
@@ -315,12 +319,12 @@ func (q *Queries) UpdateWord(ctx context.Context, arg UpdateWordParams) (Word, e
 	return i, err
 }
 
-const updateWordProgress = `-- name: UpdateWordProgress :exec
+const updateWordProgress = `-- name: UpdateWordProgress :execrows
 UPDATE words
 SET show_count      = $1,
     last_shown_date = $2,
     is_learned      = $3,
-    updated_at      = now()
+    updated_at      = statement_timestamp()
 WHERE id = $4
   AND user_id = $5
   AND deleted_at IS NULL
@@ -337,13 +341,16 @@ type UpdateWordProgressParams struct {
 // PATCH /v1/words/progress/batch, called once per id inside a single Go
 // transaction. All three progress fields are always supplied — the client
 // flushes a snapshot of its local state, not a delta.
-func (q *Queries) UpdateWordProgress(ctx context.Context, arg UpdateWordProgressParams) error {
-	_, err := q.db.Exec(ctx, updateWordProgress,
+func (q *Queries) UpdateWordProgress(ctx context.Context, arg UpdateWordProgressParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateWordProgress,
 		arg.ShowCount,
 		arg.LastShownDate,
 		arg.IsLearned,
 		arg.ID,
 		arg.UserID,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

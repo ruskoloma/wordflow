@@ -193,7 +193,12 @@ func (h *handlers) authEmailStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stateID := newStateID()
+	stateID, err := newStateID()
+	if err != nil {
+		h.logger.Error("generate email auth state id", "err", err)
+		writeError(w, http.StatusInternalServerError, "internal", "could not start sign-in")
+		return
+	}
 	emailAuthStates.put(stateID, stateEntry{
 		session:   clerkSession,
 		email:     email,
@@ -293,10 +298,8 @@ func (h *handlers) authEmailVerify(w http.ResponseWriter, r *http.Request) {
 
 // --- helpers ----------------------------------------------------------
 
-// createPasswordlessUser creates a Clerk user via the backend SDK
-// with no password. The email is stamped as "verification_admin"
-// server-side, which is what allows the subsequent sign_in flow to
-// succeed without running a verification round trip.
+// createPasswordlessUser creates a Clerk user via the backend SDK with
+// no password so the Frontend API sign-in flow can send an email code.
 func createPasswordlessUser(ctx context.Context, email string) error {
 	emails := []string{email}
 	skipPassword := true
@@ -307,10 +310,11 @@ func createPasswordlessUser(ctx context.Context, email string) error {
 	return err
 }
 
-// newStateID returns a 32-char hex string. Uses crypto/rand so a
-// caller can't guess another user's state_id and race them to verify.
-func newStateID() string {
+// newStateID returns a random 32-char hex string.
+func newStateID() (string, error) {
 	var buf [16]byte
-	_, _ = rand.Read(buf[:])
-	return hex.EncodeToString(buf[:])
+	if _, err := rand.Read(buf[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf[:]), nil
 }

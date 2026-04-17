@@ -34,8 +34,13 @@ func (h *handlers) createCollection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	body.Name = trimRequiredString(body.Name)
 	if body.Name == "" {
 		writeError(w, http.StatusBadRequest, "missing_fields", "name is required")
+		return
+	}
+	if body.ID != nil && *body.ID == uuid.Nil {
+		writeError(w, http.StatusBadRequest, "invalid_id", "id must be a UUID")
 		return
 	}
 
@@ -57,16 +62,7 @@ func (h *handlers) createCollection(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
-			existing, lookupErr := q.FindLiveCollectionByName(r.Context(), sqlc.FindLiveCollectionByNameParams{
-				UserID: userID,
-				Name:   body.Name,
-			})
-			if lookupErr != nil {
-				h.logger.Error("collection 409 lookup failed", "err", lookupErr)
-				writeError(w, http.StatusInternalServerError, "internal", "lookup failed after conflict")
-				return
-			}
-			writeConflict(w, "collection_exists", existing.ID)
+			h.writeCreateCollectionConflict(w, r, q, userID, body.Name, id)
 			return
 		}
 		h.logger.Error("create collection", "err", err)
@@ -91,6 +87,11 @@ func (h *handlers) updateCollection(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &body) {
 		return
 	}
+	trimOptionalString(body.Name)
+	if body.Name != nil && *body.Name == "" {
+		writeError(w, http.StatusBadRequest, "invalid_fields", "name cannot be empty")
+		return
+	}
 
 	q := sqlc.New(h.pool)
 	col, err := q.UpdateCollection(r.Context(), sqlc.UpdateCollectionParams{
@@ -105,10 +106,14 @@ func (h *handlers) updateCollection(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		if isUniqueViolation(err) {
-			// Rename collided with another live collection.
+			if body.Name == nil {
+				h.logger.Error("collection unique violation without name", "err", err, "collection_id", id)
+				writeError(w, http.StatusInternalServerError, "internal", "db error")
+				return
+			}
 			existing, lookupErr := q.FindLiveCollectionByName(r.Context(), sqlc.FindLiveCollectionByNameParams{
 				UserID: userID,
-				Name:   *body.Name, // non-nil because a rename triggered the violation
+				Name:   *body.Name,
 			})
 			if lookupErr != nil {
 				h.logger.Error("collection rename 409 lookup failed", "err", lookupErr)
@@ -156,4 +161,28 @@ func (h *handlers) deleteCollection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *handlers) writeCreateCollectionConflict(
+	w http.ResponseWriter,
+	r *http.Request,
+	q *sqlc.Queries,
+	userID string,
+	name string,
+	id uuid.UUID,
+) {
+	existing, err := q.FindLiveCollectionByName(r.Context(), sqlc.FindLiveCollectionByNameParams{
+		UserID: userID,
+		Name:   name,
+	})
+	if err == nil {
+		writeConflict(w, "collection_exists", existing.ID)
+		return
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeConflict(w, "collection_id_exists", id)
+		return
+	}
+	h.logger.Error("collection conflict lookup failed", "err", err)
+	writeError(w, http.StatusInternalServerError, "internal", "lookup failed after conflict")
 }

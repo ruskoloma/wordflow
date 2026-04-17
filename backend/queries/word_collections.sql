@@ -26,16 +26,29 @@ INSERT INTO word_collections (
     user_id,
     word_id,
     collection_id
-) VALUES (
-    $1, $2, $3, $4
+)
+SELECT $1, $2, $3, $4
+WHERE EXISTS (
+    SELECT 1
+    FROM words
+    WHERE id = $3
+      AND user_id = $2
+      AND deleted_at IS NULL
+)
+AND EXISTS (
+    SELECT 1
+    FROM collections
+    WHERE id = $4
+      AND user_id = $2
+      AND deleted_at IS NULL
 )
 RETURNING *;
 
 -- name: SoftDeleteWordCollection :exec
 -- DELETE /v1/collections/{cid}/words/{wid}.
 UPDATE word_collections
-SET deleted_at = now(),
-    updated_at = now()
+SET deleted_at = statement_timestamp(),
+    updated_at = statement_timestamp()
 WHERE user_id = $1
   AND word_id = $2
   AND collection_id = $3
@@ -46,13 +59,13 @@ WHERE user_id = $1
 -- as SoftDeleteWord. All live links pointing at a deleted word become
 -- tombstones with a bumped updated_at so other devices drop them.
 UPDATE word_collections
-SET deleted_at = now(),
-    updated_at = now()
+SET deleted_at = statement_timestamp(),
+    updated_at = statement_timestamp()
 WHERE user_id = $1 AND word_id = $2 AND deleted_at IS NULL;
 
 -- name: SoftDeleteLinksByCollection :exec
 -- Same pattern, from the DELETE /v1/collections/{id} handler.
 UPDATE word_collections
-SET deleted_at = now(),
-    updated_at = now()
+SET deleted_at = statement_timestamp(),
+    updated_at = statement_timestamp()
 WHERE user_id = $1 AND collection_id = $2 AND deleted_at IS NULL;

@@ -21,11 +21,8 @@ type Config struct {
 	Port string `envconfig:"PORT" default:"8080"`
 	Env  string `envconfig:"ENV"  default:"development"`
 
-	// Database — required on every phase after Phase 1.
 	DatabaseURL string `envconfig:"DATABASE_URL" required:"true"`
 
-	// Clerk — optional until Phase 5 ships auth. The server should still
-	// boot without these so we can iterate on DB stuff in isolation.
 	ClerkSecretKey       string `envconfig:"CLERK_SECRET_KEY"`
 	ClerkAuthorizedParty string `envconfig:"CLERK_AUTHORIZED_PARTY"`
 
@@ -40,12 +37,6 @@ type Config struct {
 	// The Frontend API host is derived from the key's base64 suffix.
 	ClerkPublishableKey string `envconfig:"CLERK_PUBLISHABLE_KEY"`
 
-	// OpenRouter — optional until Phase 8 ships the AI proxy.
-	// Model defaults to openai/gpt-4o-mini — cheap, fast, good
-	// enough for single-word translation. Override via the
-	// OPENROUTER_MODEL env var to swap providers without a code
-	// change; the full list of candidates lives in
-	// android/app/src/main/java/com/rsln/wordflow/data/remote/AiModels.kt.
 	OpenrouterAPIKey string `envconfig:"OPENROUTER_API_KEY"`
 	OpenrouterModel  string `envconfig:"OPENROUTER_MODEL" default:"google/gemini-2.5-flash-lite"`
 }
@@ -58,10 +49,4 @@ func Load() (Config, error) {
 		return cfg, err
 	}
 	return cfg, nil
-}
-
-// IsDevelopment returns true when ENV is "development" (the default).
-// Useful later for conditionally enabling verbose logs or dev-only routes.
-func (c Config) IsDevelopment() bool {
-	return c.Env == "development"
 }

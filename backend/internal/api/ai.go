@@ -11,18 +11,6 @@ import (
 	"github.com/rsln-ua/wordflow-backend/internal/auth"
 )
 
-// ---------- Request / response shapes -------------------------------
-//
-// The wire shapes here are *typed* versions of what the Android app
-// used to build and send directly to OpenRouter. Moving the prompt
-// engineering server-side means the client sends semantic inputs
-// (word, collection name, difficulty) and gets back a cleaned-up
-// result — no raw chat/completions bodies.
-//
-// Field names use snake_case to match the rest of the WordFlow API.
-// The internal parsing intermediate still uses the camelCase keys
-// that the model emits (see translateRaw / generatedWordRaw).
-
 type translateRequest struct {
 	Word                string   `json:"word"`
 	ExistingCollections []string `json:"existing_collections,omitempty"`
@@ -41,8 +29,6 @@ type translateResponse struct {
 	Difficulty            int      `json:"difficulty"`
 }
 
-// translateRaw mirrors translateResponse but with the camelCase JSON
-// keys that OpenRouter/the model actually emits.
 type translateRaw struct {
 	Translation           string   `json:"translation"`
 	Examples              []string `json:"examples"`
@@ -76,17 +62,10 @@ type generatedWord struct {
 	Difficulty    int      `json:"difficulty"`
 }
 
-// generatedCollectionRaw matches what the model emits: a top-level
-// object with a "words" field whose items use the same shape as
-// generatedWord (camelCase → snake_case isn't needed here because the
-// prompt already uses lowercase keys).
 type generatedCollectionRaw struct {
 	Words []generatedWord `json:"words"`
 }
 
-// ---------- Handlers ------------------------------------------------
-
-// POST /v1/ai/translate
 func (h *handlers) aiTranslate(w http.ResponseWriter, r *http.Request) {
 	userID := auth.MustUserIDFromCtx(r.Context())
 
@@ -100,6 +79,8 @@ func (h *handlers) aiTranslate(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &body) {
 		return
 	}
+	body.Word = trimRequiredString(body.Word)
+	body.ExistingCollections = trimStringSlice(body.ExistingCollections)
 	if body.Word == "" {
 		writeError(w, http.StatusBadRequest, "missing_fields", "word is required")
 		return
@@ -134,21 +115,12 @@ func (h *handlers) aiTranslate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := translateResponse(raw) // field names match 1:1, types are identical
-
-	// Clamp difficulty to the documented 1–10 range. Models occasionally
-	// return 0 or 11 even when the prompt forbids it.
-	if resp.Difficulty < 1 {
-		resp.Difficulty = 1
-	}
-	if resp.Difficulty > 10 {
-		resp.Difficulty = 10
-	}
+	resp := translateResponse(raw)
+	resp.Difficulty = clampDifficulty(resp.Difficulty)
 
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// POST /v1/ai/generate-collection
 func (h *handlers) aiGenerateCollection(w http.ResponseWriter, r *http.Request) {
 	userID := auth.MustUserIDFromCtx(r.Context())
 
@@ -162,6 +134,8 @@ func (h *handlers) aiGenerateCollection(w http.ResponseWriter, r *http.Request) 
 	if !decodeJSON(w, r, &body) {
 		return
 	}
+	body.CollectionName = trimRequiredString(body.CollectionName)
+	body.Description = trimRequiredString(body.Description)
 	if body.CollectionName == "" || body.WordCount <= 0 {
 		writeError(w, http.StatusBadRequest, "missing_fields",
 			"collection_name and positive word_count are required")
@@ -181,7 +155,7 @@ func (h *handlers) aiGenerateCollection(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second) // generation can be slow
+	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
 	defer cancel()
 
 	content, err := h.ai.ChatCompletion(ctx, []ai.Message{
@@ -206,14 +180,8 @@ func (h *handlers) aiGenerateCollection(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Clamp difficulties on every generated word.
 	for i := range raw.Words {
-		if raw.Words[i].Difficulty < 1 {
-			raw.Words[i].Difficulty = 1
-		}
-		if raw.Words[i].Difficulty > 10 {
-			raw.Words[i].Difficulty = 10
-		}
+		raw.Words[i].Difficulty = clampDifficulty(raw.Words[i].Difficulty)
 	}
 
 	writeJSON(w, http.StatusOK, generateCollectionResponse{Words: raw.Words})
@@ -242,12 +210,7 @@ func maxTokensForGeneratedWords(count int) int {
 	return maxTokens
 }
 
-// handleAIError turns errors from the ai package into the right HTTP
-// status + response body. Keeps per-handler error mapping consistent.
 func (h *handlers) handleAIError(w http.ResponseWriter, op string, err error) {
-	// Client not configured → the server doesn't have an API key.
-	// 503 with a clear message so the caller knows it's a deployment
-	// issue, not their fault.
 	if errors.Is(err, ai.ErrNotConfigured) {
 		h.logger.Warn("ai not configured", "op", op)
 		writeError(w, http.StatusServiceUnavailable, "ai_not_configured",
@@ -255,9 +218,6 @@ func (h *handlers) handleAIError(w http.ResponseWriter, op string, err error) {
 		return
 	}
 
-	// Upstream status error. If the upstream 4xx'd us we pass that
-	// through as 502 Bad Gateway — the client can't fix it, but it's
-	// useful to know OpenRouter rejected something.
 	var stErr *ai.StatusError
 	if errors.As(err, &stErr) {
 		h.logger.Error("ai upstream error", "op", op, "upstream_status", stErr.StatusCode, "body", stErr.Body)
@@ -266,7 +226,6 @@ func (h *handlers) handleAIError(w http.ResponseWriter, op string, err error) {
 		return
 	}
 
-	// Everything else: transport error, parse failure, timeout.
 	h.logger.Error("ai internal error", "op", op, "err", err)
 	writeError(w, http.StatusInternalServerError, "internal", "AI request failed")
 }
