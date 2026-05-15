@@ -33,9 +33,26 @@ class LearningViewModel(
     val activeCollections = collectionRepository.getActiveCollections()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val studyWords = combine(
+        wordRepository.getAllWordsWithCollections(),
+        practiceAll
+    ) { wordsWithCollections, includeAll ->
+        wordsWithCollections
+            .filter { includeAll || it.collections.any { collection -> collection.isActive } }
+            .map { it.word }
+            .distinctBy { it.id }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     fun togglePracticeAll(enabled: Boolean) {
         viewModelScope.launch {
             settingsDataStore.set(SettingsDataStore.PRACTICE_ALL, enabled)
+        }
+    }
+
+    fun recordAnswer(word: WordEntity, remembered: Boolean) {
+        viewModelScope.launch {
+            wordRepository.incrementShowCount(word.id)
+            wordRepository.setLearned(word.id, remembered)
         }
     }
 
