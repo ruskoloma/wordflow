@@ -79,11 +79,15 @@ val bottomNavItems = listOf(
 )
 
 @Composable
-fun WordFlowNavHost(app: WordFlowApp, startRoute: String? = null) {
+fun WordFlowNavHost(
+    app: WordFlowApp,
+    startRoute: String? = null,
+    routeRequestToken: Int = 0
+) {
     val navController = rememberNavController()
 
     // Navigate to requested route on first composition (e.g. from widget)
-    LaunchedEffect(startRoute) {
+    LaunchedEffect(startRoute, routeRequestToken) {
         if (startRoute != null) {
             navController.navigate(startRoute) {
                 popUpTo(Screen.Learning.route) { saveState = true }

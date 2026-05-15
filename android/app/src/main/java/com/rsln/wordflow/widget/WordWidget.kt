@@ -83,6 +83,9 @@ class WordWidgetReceiver : AppWidgetProvider() {
             // Left side — open app on Add screen
             val openIntent = Intent(context, MainActivity::class.java).apply {
                 putExtra("navigate_to", "add_word")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
             }
             val openPending = PendingIntent.getActivity(
                 context, 0, openIntent,

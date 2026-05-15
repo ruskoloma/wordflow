@@ -2,12 +2,14 @@ package com.rsln.wordflow.ui.screens.learning
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -15,6 +17,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -396,6 +400,14 @@ private fun StudySessionScreen(
                 when (mode) {
                     StudyMode.Flashcards -> FlashcardPrompt(
                         word = currentWord,
+                        canGoBack = index > 0,
+                        canGoForward = index < sessionWords.lastIndex,
+                        onPrevious = {
+                            if (index > 0) index -= 1
+                        },
+                        onNext = {
+                            if (index == sessionWords.lastIndex) finished = true else index += 1
+                        },
                         onAnswer = { remembered ->
                             if (remembered) correctCount += 1
                             onRecordAnswer(currentWord, remembered)
@@ -428,36 +440,98 @@ private fun StudySessionScreen(
 @Composable
 private fun FlashcardPrompt(
     word: WordEntity,
+    canGoBack: Boolean,
+    canGoForward: Boolean,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
     onAnswer: (Boolean) -> Unit
 ) {
-    var revealed by remember(word.id) { mutableStateOf(false) }
+    var flipped by remember(word.id) { mutableStateOf(false) }
+    var dragOffset by remember(word.id) { mutableStateOf(0f) }
 
     Card(
-        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 300.dp)
+            .graphicsLayer {
+                translationX = dragOffset
+                rotationZ = dragOffset / 60f
+                cameraDistance = 12f * density
+            }
+            .pointerInput(word.id, canGoBack, canGoForward) {
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        when {
+                            dragOffset > 120f && canGoBack -> onPrevious()
+                            dragOffset < -120f && canGoForward -> onNext()
+                        }
+                        dragOffset = 0f
+                    },
+                    onDragCancel = { dragOffset = 0f },
+                    onHorizontalDrag = { _, dragAmount ->
+                        dragOffset = (dragOffset + dragAmount).coerceIn(-220f, 220f)
+                    }
+                )
+            }
+            .clickable { flipped = !flipped },
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = CardSurface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
+                .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = word.originalWord,
+                text = if (flipped) "Translation" else "Word",
+                style = MaterialTheme.typography.labelMedium,
+                color = OnSurfaceVariant
+            )
+            Text(
+                text = if (flipped) word.translation else word.originalWord,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = OnSurface,
                 textAlign = TextAlign.Center
             )
-            if (revealed) {
+            if (flipped) {
                 Text(
-                    text = word.translation,
-                    style = MaterialTheme.typography.titleMedium,
+                    text = word.originalWord,
+                    style = MaterialTheme.typography.titleSmall,
                     color = OnSurfaceVariant,
                     textAlign = TextAlign.Center
                 )
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = "Swipe to move between cards. Tap to flip.",
+                style = MaterialTheme.typography.bodySmall,
+                color = OnSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedIconButton(
+                    onClick = onPrevious,
+                    enabled = canGoBack,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Previous")
+                }
+                OutlinedButton(onClick = { flipped = !flipped }, shape = RoundedCornerShape(12.dp)) {
+                    Text(if (flipped) "Show word" else "Flip")
+                }
+                OutlinedIconButton(
+                    onClick = onNext,
+                    enabled = canGoForward,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Next")
+                }
+            }
+            if (flipped) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedButton(onClick = { onAnswer(false) }, shape = RoundedCornerShape(12.dp)) {
                         Text("Forgot")
@@ -465,10 +539,6 @@ private fun FlashcardPrompt(
                     Button(onClick = { onAnswer(true) }, shape = RoundedCornerShape(12.dp)) {
                         Text("Remembered")
                     }
-                }
-            } else {
-                Button(onClick = { revealed = true }, shape = RoundedCornerShape(12.dp)) {
-                    Text("Show answer")
                 }
             }
         }
@@ -494,9 +564,9 @@ private fun TypeAnswerPrompt(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Text("Translate", style = MaterialTheme.typography.labelMedium, color = OnSurfaceVariant)
+            Text("Type the English word", style = MaterialTheme.typography.labelMedium, color = OnSurfaceVariant)
             Text(
-                text = word.originalWord,
+                text = word.translation,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = OnSurface
@@ -508,7 +578,7 @@ private fun TypeAnswerPrompt(
                     checked = null
                 },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Type translation") },
+                placeholder = { Text("Type English word") },
                 singleLine = true,
                 readOnly = checked != null,
                 shape = RoundedCornerShape(14.dp),
@@ -521,7 +591,7 @@ private fun TypeAnswerPrompt(
             )
             checked?.let { correct ->
                 Text(
-                    text = if (correct) "Correct" else "Answer: ${word.translation}",
+                    text = if (correct) "Correct" else "Answer: ${word.originalWord}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (correct) Success else Error
                 )
@@ -536,7 +606,7 @@ private fun TypeAnswerPrompt(
                 }
                 Button(
                     onClick = {
-                        val correct = isAcceptedAnswer(answer, word.translation)
+                        val correct = isAcceptedAnswer(answer, word.originalWord)
                         if (checked == null) {
                             checked = correct
                         } else {

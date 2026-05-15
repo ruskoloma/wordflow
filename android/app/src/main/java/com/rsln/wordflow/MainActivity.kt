@@ -1,5 +1,6 @@
 package com.rsln.wordflow
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -9,6 +10,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.rsln.wordflow.ui.navigation.WordFlowNavHost
 import com.rsln.wordflow.ui.screens.login.LoginScreen
@@ -28,12 +32,15 @@ import com.rsln.wordflow.ui.theme.WordFlowTheme
  * inside SyncService.refresh() which piggybacks on it.
  */
 class MainActivity : ComponentActivity() {
+    private var requestedRoute by mutableStateOf<String?>(null)
+    private var routeRequestToken by mutableIntStateOf(0)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
         val app = application as WordFlowApp
-        val navigateTo = intent?.getStringExtra("navigate_to")
+        applyRouteRequest(intent)
 
         setContent {
             WordFlowTheme {
@@ -57,10 +64,25 @@ class MainActivity : ComponentActivity() {
                     if (userId == null) {
                         LoginScreen(app = app)
                     } else {
-                        WordFlowNavHost(app = app, startRoute = navigateTo)
+                        WordFlowNavHost(
+                            app = app,
+                            startRoute = requestedRoute,
+                            routeRequestToken = routeRequestToken
+                        )
                     }
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        applyRouteRequest(intent)
+    }
+
+    private fun applyRouteRequest(intent: Intent?) {
+        requestedRoute = intent?.getStringExtra("navigate_to")
+        routeRequestToken += 1
     }
 }
